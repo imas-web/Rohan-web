@@ -36,7 +36,7 @@ const ULTIMATE_SHIELD_DAMAGE_MULT = 0.08
 const ULTIMATE_SHIELD_DURATION = 4
 const ULTIMATE_GUERRERO_RADIUS = 150
 const ULTIMATE_CAZADOR_RADIUS = 280
-const ATTACK_SWING_DURATION = 0.18
+const ATTACK_SWING_DURATION = 0.135
 const ATTACK_SWING_MAX_ANGLE = 1.15
 
 function damageReductionFromDefense(defense: number) {
@@ -331,7 +331,7 @@ export default function GameCanvas({
     if (!lp.alive || lp.attackCooldownLeft > 0) return
     const weapon = getWeapon(lp.weaponId)
     lp.attackCooldownLeft = 1 / weapon.attackSpeed
-    lp.attackAnim = 0.18
+    lp.attackAnim = ATTACK_SWING_DURATION
     let hitAny = false
     enemiesRef.current.forEach((e, uid) => {
       if (dist(lp.pos, e.pos) <= weapon.range) {
