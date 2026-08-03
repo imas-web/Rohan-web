@@ -22,6 +22,15 @@ interface LocalPlayer {
   attackAnim: number
   hitFlash: number
   alive: boolean
+  blocking: boolean
+}
+
+const BLOCK_SPEED_MULT = 0.4
+const BLOCK_DAMAGE_MULT = 0.3
+const ENEMY_TELEGRAPH_WINDOW = 0.3
+
+function damageReductionFromDefense(defense: number) {
+  return defense / (defense + 50)
 }
 
 interface RemotePlayer extends NetPlayerUpdate {
@@ -126,6 +135,7 @@ export default function GameCanvas({
     attackAnim: 0,
     hitFlash: 0,
     alive: true,
+    blocking: false,
   })
 
   const remotePlayersRef = useRef<Map<string, RemotePlayer>>(new Map())
@@ -135,6 +145,7 @@ export default function GameCanvas({
   const joystickRef = useRef<Vec2>({ x: 0, y: 0 })
   const attackHeldRef = useRef(false)
   const lastAttackTapRef = useRef(0)
+  const blockHeldRef = useRef(false)
 
   const missionStateRef = useRef({
     wave: 1,
@@ -211,7 +222,13 @@ export default function GameCanvas({
   function applyDamageToLocal(amount: number) {
     const lp = localRef.current
     if (!lp.alive) return
-    lp.hp -= amount
+    const armor = getArmor(lp.armorId)
+    let dmg = amount * (1 - damageReductionFromDefense(armor.defense))
+    if (lp.blocking) {
+      dmg *= BLOCK_DAMAGE_MULT
+      floatingRef.current.push({ pos: { ...lp.pos }, text: 'Bloqueado', color: '#4C6B8A', life: 0.6, vy: -30 })
+    }
+    lp.hp -= dmg
     lp.hitFlash = 0.2
     if (lp.hp <= 0) {
       lp.hp = 0
@@ -260,10 +277,12 @@ export default function GameCanvas({
     function onKeyDown(e: KeyboardEvent) {
       keysRef.current[e.key.toLowerCase()] = true
       if (e.key === ' ') attackHeldRef.current = true
+      if (e.key === 'Shift') blockHeldRef.current = true
     }
     function onKeyUp(e: KeyboardEvent) {
       keysRef.current[e.key.toLowerCase()] = false
       if (e.key === ' ') attackHeldRef.current = false
+      if (e.key === 'Shift') blockHeldRef.current = false
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
@@ -427,6 +446,7 @@ export default function GameCanvas({
     function updateLocalPlayer(dt: number) {
       const lp = localRef.current
       if (!lp.alive) return
+      lp.blocking = blockHeldRef.current
       let mv = { x: 0, y: 0 }
       if (keysRef.current['w'] || keysRef.current['arrowup']) mv.y -= 1
       if (keysRef.current['s'] || keysRef.current['arrowdown']) mv.y += 1
@@ -435,7 +455,7 @@ export default function GameCanvas({
       if (joystickRef.current.x !== 0 || joystickRef.current.y !== 0) mv = { ...joystickRef.current }
       mv = normalize(mv)
       const armor = getArmor(lp.armorId)
-      const speed = 150 * armor.speedMod * (1 + lp.level * 0.004)
+      const speed = 150 * armor.speedMod * (1 + lp.level * 0.004) * (lp.blocking ? BLOCK_SPEED_MULT : 1)
       if (mv.x !== 0 || mv.y !== 0) {
         lp.facing = mv
         lp.pos = {
@@ -448,7 +468,7 @@ export default function GameCanvas({
       if (lp.hitFlash > 0) lp.hitFlash -= dt
 
       const now = performance.now()
-      if (attackHeldRef.current || now - lastAttackTapRef.current < 120) {
+      if (!lp.blocking && (attackHeldRef.current || now - lastAttackTapRef.current < 120)) {
         tryLocalAttack(now)
       }
     }
@@ -478,6 +498,7 @@ export default function GameCanvas({
           maxHp: lp.maxHp,
           level: lp.level,
           attacking: lp.attackAnim > 0,
+          blocking: lp.blocking,
           weaponId: lp.weaponId,
           armorId: lp.armorId,
         })
@@ -588,15 +609,24 @@ export default function GameCanvas({
       enemiesRef.current.forEach((e) => {
         const def = ENEMIES[e.defId]
         const r = def.radius
-        ctx.beginPath()
-        ctx.arc(e.pos.x, e.pos.y, r, 0, Math.PI * 2)
-        ctx.fillStyle = e.hitFlash > 0 ? '#FFFFFF' : def.color
-        ctx.fill()
-        if (def.isBoss) {
-          ctx.strokeStyle = '#C9A227'
+        const targetPos = getEntityPosById(e.targetId) ?? BASE_POS
+        const facing = normalize({ x: targetPos.x - e.pos.x, y: targetPos.y - e.pos.y })
+        const telegraphing = e.attackCooldownLeft > 0 && e.attackCooldownLeft <= ENEMY_TELEGRAPH_WINDOW
+
+        if (telegraphing) {
+          const pulse = 1 - e.attackCooldownLeft / ENEMY_TELEGRAPH_WINDOW
+          ctx.beginPath()
+          ctx.arc(e.pos.x, e.pos.y, r + 6 + pulse * 5, 0, Math.PI * 2)
+          ctx.strokeStyle = `rgba(217, 103, 63, ${0.35 + pulse * 0.5})`
           ctx.lineWidth = 3
           ctx.stroke()
         }
+
+        drawHumanoid(ctx, e.pos, facing, r, def.color, '#20241A', def.isBoss ? '#C9A227' : 'rgba(0,0,0,0.45)', def.isBoss ? 3 : 1.5, e.hitFlash > 0, {
+          horns: !def.isBoss,
+          crown: def.isBoss,
+          bow: !!def.ranged,
+        })
         drawBar(e.pos.x - r, e.pos.y - r - 12, r * 2, 5, e.hp / e.maxHp, def.isBoss ? '#C9A227' : '#8B3A2B')
         if (def.isBoss) {
           ctx.fillStyle = '#C9A227'
@@ -608,11 +638,11 @@ export default function GameCanvas({
 
       // jugadores remotos
       remotePlayersRef.current.forEach((rp) => {
-        drawPlayer(ctx, rp.pos, rp.color, rp.name, rp.hp, rp.maxHp, false, rp.attacking)
+        drawPlayer(ctx, rp.pos, rp.facing, rp.color, rp.name, rp.hp, rp.maxHp, false, rp.attacking, rp.blocking)
       })
 
       // jugador local
-      drawPlayer(ctx, lp.pos, lp.color, lp.name + ' (vos)', lp.hp, lp.maxHp, true, lp.attackAnim > 0)
+      drawPlayer(ctx, lp.pos, lp.facing, lp.color, lp.name + ' (vos)', lp.hp, lp.maxHp, true, lp.attackAnim > 0, lp.blocking)
       if (lp.hitFlash > 0) {
         ctx.beginPath()
         ctx.arc(lp.pos.x, lp.pos.y, 26, 0, Math.PI * 2)
@@ -648,12 +678,14 @@ export default function GameCanvas({
     function drawPlayer(
       c: CanvasRenderingContext2D,
       pos: Vec2,
+      facing: Vec2,
       color: string,
       name: string,
       hp: number,
       maxHp: number,
       isLocal: boolean,
-      attacking: boolean
+      attacking: boolean,
+      blocking: boolean
     ) {
       if (attacking) {
         c.beginPath()
@@ -664,18 +696,142 @@ export default function GameCanvas({
         c.stroke()
         c.globalAlpha = 1
       }
-      c.beginPath()
-      c.arc(pos.x, pos.y, 18, 0, Math.PI * 2)
-      c.fillStyle = color
-      c.fill()
-      c.strokeStyle = isLocal ? '#E8DFC8' : 'rgba(232,223,200,0.6)'
-      c.lineWidth = isLocal ? 3 : 2
-      c.stroke()
+      drawHumanoid(c, pos, facing, 18, color, '#E8DFC8', isLocal ? '#E8DFC8' : 'rgba(232,223,200,0.6)', isLocal ? 3 : 2, false, {
+        shield: blocking,
+      })
       drawBar(pos.x - 22, pos.y - 34, 44, 6, Math.max(0, hp) / maxHp, '#7FD1AE')
-      c.fillStyle = '#E8DFC8'
+      c.fillStyle = blocking ? '#4C6B8A' : '#E8DFC8'
       c.font = '11px Inter, sans-serif'
       c.textAlign = 'center'
-      c.fillText(name, pos.x, pos.y - 40)
+      c.fillText(blocking ? `${name} 🛡` : name, pos.x, pos.y - 40)
+    }
+
+    function getEntityPosById(id: string | null): Vec2 | null {
+      if (!id) return null
+      if (id === localRef.current.id) return localRef.current.pos
+      const rp = remotePlayersRef.current.get(id)
+      return rp ? rp.pos : null
+    }
+
+    function drawHumanoid(
+      c: CanvasRenderingContext2D,
+      pos: Vec2,
+      facing: Vec2,
+      radius: number,
+      bodyColor: string,
+      headColor: string,
+      outlineColor: string,
+      outlineWidth: number,
+      flash: boolean,
+      extras: { horns?: boolean; crown?: boolean; shield?: boolean; bow?: boolean }
+    ) {
+      const dir = facing.x === 0 && facing.y === 0 ? { x: 0, y: 1 } : facing
+      const fillColor = flash ? '#FFFFFF' : bodyColor
+      const headFill = flash ? '#FFFFFF' : headColor
+      const bw = radius * 1.15
+      const bh = radius * 1.5
+
+      // sombra
+      c.beginPath()
+      c.ellipse(pos.x, pos.y + radius * 0.75, radius * 0.9, radius * 0.35, 0, 0, Math.PI * 2)
+      c.fillStyle = 'rgba(0,0,0,0.35)'
+      c.fill()
+
+      // cuerpo (cápsula)
+      c.beginPath()
+      c.moveTo(pos.x - bw / 2, pos.y - bh / 2 + bw / 2)
+      c.arcTo(pos.x - bw / 2, pos.y - bh / 2, pos.x, pos.y - bh / 2, bw / 2)
+      c.arcTo(pos.x + bw / 2, pos.y - bh / 2, pos.x + bw / 2, pos.y - bh / 2 + bw / 2, bw / 2)
+      c.lineTo(pos.x + bw / 2, pos.y + bh / 2 - bw / 2)
+      c.arcTo(pos.x + bw / 2, pos.y + bh / 2, pos.x, pos.y + bh / 2, bw / 2)
+      c.arcTo(pos.x - bw / 2, pos.y + bh / 2, pos.x - bw / 2, pos.y + bh / 2 - bw / 2, bw / 2)
+      c.closePath()
+      c.fillStyle = fillColor
+      c.fill()
+      c.strokeStyle = outlineColor
+      c.lineWidth = outlineWidth
+      c.stroke()
+
+      // cabeza
+      const headR = radius * 0.55
+      const headX = pos.x
+      const headY = pos.y - bh * 0.34
+      c.beginPath()
+      c.arc(headX, headY, headR, 0, Math.PI * 2)
+      c.fillStyle = headFill
+      c.fill()
+      c.strokeStyle = outlineColor
+      c.lineWidth = Math.max(1, outlineWidth - 1)
+      c.stroke()
+
+      if (extras.horns) {
+        c.fillStyle = '#0B0C10'
+        c.beginPath()
+        c.moveTo(headX - headR * 0.6, headY - headR * 0.5)
+        c.lineTo(headX - headR * 1.3, headY - headR * 1.5)
+        c.lineTo(headX - headR * 0.1, headY - headR * 0.85)
+        c.closePath()
+        c.fill()
+        c.beginPath()
+        c.moveTo(headX + headR * 0.6, headY - headR * 0.5)
+        c.lineTo(headX + headR * 1.3, headY - headR * 1.5)
+        c.lineTo(headX + headR * 0.1, headY - headR * 0.85)
+        c.closePath()
+        c.fill()
+      }
+
+      if (extras.crown) {
+        c.fillStyle = '#C9A227'
+        for (let i = -1; i <= 1; i++) {
+          c.beginPath()
+          c.moveTo(headX + i * headR * 0.7 - headR * 0.22, headY - headR * 0.85)
+          c.lineTo(headX + i * headR * 0.7, headY - headR * 1.6)
+          c.lineTo(headX + i * headR * 0.7 + headR * 0.22, headY - headR * 0.85)
+          c.closePath()
+          c.fill()
+        }
+      }
+
+      // arma / arco, rotado según hacia dónde mira
+      const angle = Math.atan2(dir.y, dir.x)
+      c.save()
+      c.translate(pos.x, pos.y)
+      c.rotate(angle)
+      if (extras.bow) {
+        c.strokeStyle = '#8A6A3E'
+        c.lineWidth = 2
+        c.beginPath()
+        c.arc(radius * 0.9, 0, radius * 0.7, -1.1, 1.1)
+        c.stroke()
+        c.strokeStyle = 'rgba(232,223,200,0.5)'
+        c.lineWidth = 1
+        c.beginPath()
+        c.moveTo(radius * 0.9, -radius * 0.66)
+        c.lineTo(radius * 1.55, 0)
+        c.lineTo(radius * 0.9, radius * 0.66)
+        c.stroke()
+      } else {
+        c.strokeStyle = '#B8B0A0'
+        c.lineWidth = Math.max(2, radius * 0.16)
+        c.beginPath()
+        c.moveTo(radius * 0.4, 0)
+        c.lineTo(radius * 1.6, 0)
+        c.stroke()
+        c.beginPath()
+        c.moveTo(radius * 1.15, -radius * 0.28)
+        c.lineTo(radius * 1.15, radius * 0.28)
+        c.stroke()
+      }
+      if (extras.shield) {
+        c.beginPath()
+        c.arc(radius * 1.05, 0, radius * 0.9, -0.9, 0.9)
+        c.strokeStyle = 'rgba(76,107,138,0.9)'
+        c.lineWidth = 5
+        c.stroke()
+        c.fillStyle = 'rgba(76,107,138,0.16)'
+        c.fill()
+      }
+      c.restore()
     }
 
     raf = requestAnimationFrame(loop)
@@ -805,6 +961,12 @@ export default function GameCanvas({
         }}
         onAttackEnd={() => {
           attackHeldRef.current = false
+        }}
+        onBlockStart={() => {
+          blockHeldRef.current = true
+        }}
+        onBlockEnd={() => {
+          blockHeldRef.current = false
         }}
       />
     </div>

@@ -76,6 +76,10 @@ export default function HUD({ state, missionTitle }: { state: HudState; missionT
       {!state.alive && (
         <div className="hud-down-banner">Estás caído — reviví al terminar la misión, o esperá refuerzos si tus aliados siguen en pie.</div>
       )}
+
+      <div className="hud-controls-hint">
+        Mantené <strong>Shift</strong> (o el botón DEFENDER) para bloquear golpes — reducís el daño pero te movés más lento y no podés atacar.
+      </div>
     </div>
   )
 }

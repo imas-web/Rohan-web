@@ -5,11 +5,13 @@ interface Props {
   onMove: (v: Vec2) => void
   onAttackStart: () => void
   onAttackEnd: () => void
+  onBlockStart: () => void
+  onBlockEnd: () => void
 }
 
 const STICK_RADIUS = 52
 
-export default function TouchControls({ onMove, onAttackStart, onAttackEnd }: Props) {
+export default function TouchControls({ onMove, onAttackStart, onAttackEnd, onBlockStart, onBlockEnd }: Props) {
   const baseRef = useRef<HTMLDivElement | null>(null)
   const [knob, setKnob] = useState({ x: 0, y: 0 })
   const activeTouch = useRef<number | null>(null)
@@ -64,22 +66,40 @@ export default function TouchControls({ onMove, onAttackStart, onAttackEnd }: Pr
       >
         <div className="joystick-knob" style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
       </div>
-      <button
-        className="attack-btn"
-        onTouchStart={(e) => {
-          e.preventDefault()
-          onAttackStart()
-        }}
-        onTouchEnd={(e) => {
-          e.preventDefault()
-          onAttackEnd()
-        }}
-        onMouseDown={onAttackStart}
-        onMouseUp={onAttackEnd}
-        onMouseLeave={onAttackEnd}
-      >
-        ATACAR
-      </button>
+      <div className="action-buttons">
+        <button
+          className="block-btn"
+          onTouchStart={(e) => {
+            e.preventDefault()
+            onBlockStart()
+          }}
+          onTouchEnd={(e) => {
+            e.preventDefault()
+            onBlockEnd()
+          }}
+          onMouseDown={onBlockStart}
+          onMouseUp={onBlockEnd}
+          onMouseLeave={onBlockEnd}
+        >
+          DEFENDER
+        </button>
+        <button
+          className="attack-btn"
+          onTouchStart={(e) => {
+            e.preventDefault()
+            onAttackStart()
+          }}
+          onTouchEnd={(e) => {
+            e.preventDefault()
+            onAttackEnd()
+          }}
+          onMouseDown={onAttackStart}
+          onMouseUp={onAttackEnd}
+          onMouseLeave={onAttackEnd}
+        >
+          ATACAR
+        </button>
+      </div>
     </div>
   )
 }

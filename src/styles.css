@@ -545,6 +545,20 @@ canvas {
   text-align: center;
 }
 
+.hud-controls-hint {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(11, 12, 16, 0.55);
+  color: var(--parchment-dim);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  max-width: 90vw;
+  text-align: center;
+}
+
 /* ---------- Controles táctiles ---------- */
 
 .touch-controls {
@@ -579,6 +593,13 @@ canvas {
   border: 2px solid var(--parchment);
 }
 
+.action-buttons {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  pointer-events: none;
+}
+
 .attack-btn {
   width: 84px;
   height: 84px;
@@ -592,6 +613,25 @@ canvas {
   pointer-events: auto;
   box-shadow: 0 8px 22px rgba(184, 73, 46, 0.5);
   align-self: flex-end;
+}
+
+.block-btn {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--steel), #33475C);
+  border: 2px solid rgba(232, 223, 200, 0.5);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 10px;
+  pointer-events: auto;
+  box-shadow: 0 8px 22px rgba(76, 107, 138, 0.5);
+  align-self: flex-end;
+}
+
+.block-btn:active {
+  background: radial-gradient(circle at 35% 30%, #6E93B8, var(--steel));
 }
 
 /* ---------- Pantalla de resultado ---------- */

@@ -27,6 +27,7 @@ export interface NetPlayerUpdate {
   maxHp: number
   level: number
   attacking: boolean
+  blocking: boolean
   weaponId: string
   armorId: string
 }
