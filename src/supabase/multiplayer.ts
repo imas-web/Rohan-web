@@ -39,7 +39,7 @@ export interface EnemySyncPayload {
   kills?: number
   finished?: boolean
   victory?: boolean
-  lastKill?: { killerId: string; xpReward: number; enemyName: string; enemyUid: string }
+  lastKill?: { killerId: string; xpReward: number; enemyName: string; enemyUid: string; materialsDrop: number }
 }
 
 export interface HitRequestPayload {
