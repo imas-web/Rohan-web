@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/game/GameCanvas.tsx","./src/game/data.ts","./src/game/types.ts","./src/supabase/client.ts","./src/supabase/multiplayer.ts","./src/ui/CampScreen.tsx","./src/ui/HUD.tsx","./src/ui/Lobby.tsx","./src/ui/MainMenu.tsx","./src/ui/TouchControls.tsx"],"errors":true,"version":"6.0.3"}
