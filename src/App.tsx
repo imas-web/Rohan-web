@@ -48,8 +48,15 @@ export default function App() {
   const [classId, setClassId] = useState(saved?.classId ?? 'guerrero')
   const [progress, setProgress] = useState<Progress>(
     saved
-      ? { level: saved.level, xp: saved.xp, materials: saved.materials, weaponId: saved.weaponId, armorId: saved.armorId }
-      : { level: 1, xp: 0, materials: 0, weaponId: 'daga', armorId: 'ropa' }
+      ? {
+          level: saved.level,
+          xp: saved.xp,
+          materials: saved.materials,
+          weaponId: saved.weaponId,
+          armorId: saved.armorId,
+          ultimateRank: saved.ultimateRank ?? 1,
+        }
+      : { level: 1, xp: 0, materials: 0, weaponId: 'daga', armorId: 'ropa', ultimateRank: 1 }
   )
   const [room, setRoom] = useState<MultiplayerRoom | null>(null)
   const [mission, setMission] = useState<MissionDef | null>(null)
@@ -75,6 +82,10 @@ export default function App() {
 
   function handleEquip(weaponId: string, armorId: string, materialsSpent: number) {
     setProgress((prev) => ({ ...prev, weaponId, armorId, materials: prev.materials - materialsSpent }))
+  }
+
+  function handleUpgradeUltimate() {
+    setProgress((prev) => ({ ...prev, ultimateRank: prev.ultimateRank + 1 }))
   }
 
   function handleStart(m: MissionDef) {
@@ -122,7 +133,9 @@ export default function App() {
       {screen === 'camp' && (
         <CampScreen
           progress={progress}
+          classId={classId}
           onEquip={handleEquip}
+          onUpgradeUltimate={handleUpgradeUltimate}
           room={room}
           listenersRef={listenersRef}
           onStart={handleStart}
@@ -136,6 +149,7 @@ export default function App() {
           localName={name}
           localColor={color}
           classId={classId}
+          ultimateRank={progress.ultimateRank}
           weaponId={progress.weaponId}
           armorId={progress.armorId}
           startLevel={progress.level}

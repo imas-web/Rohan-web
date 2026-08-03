@@ -1,5 +1,17 @@
 import { useEffect, useState, type MutableRefObject } from 'react'
-import { ARMORS, MISSIONS, RARITY_COLOR, RARITY_COST, RARITY_MIN_LEVEL, WEAPONS, xpToNextLevel } from '../game/data'
+import {
+  ARMORS,
+  MISSIONS,
+  RARITY_COLOR,
+  RARITY_COST,
+  RARITY_MIN_LEVEL,
+  ULTIMATE_MAX_RANK,
+  ULTIMATE_RANK_COST,
+  WEAPONS,
+  getClass,
+  skillPointsForLevel,
+  xpToNextLevel,
+} from '../game/data'
 import type { MissionDef } from '../game/types'
 import type { Listeners, MultiplayerRoom } from '../supabase/multiplayer'
 
@@ -9,23 +21,32 @@ export interface Progress {
   materials: number
   weaponId: string
   armorId: string
+  ultimateRank: number
 }
 
 export default function CampScreen({
   progress,
+  classId,
   onEquip,
+  onUpgradeUltimate,
   room,
   listenersRef,
   onStart,
   onBack,
 }: {
   progress: Progress
+  classId: string
   onEquip: (weaponId: string, armorId: string, materialsSpent: number) => void
+  onUpgradeUltimate: () => void
   room: MultiplayerRoom | null
   listenersRef: MutableRefObject<Listeners>
   onStart: (mission: MissionDef) => void
   onBack: () => void
 }) {
+  const cls = getClass(classId)
+  const totalSkillPoints = skillPointsForLevel(progress.level)
+  const nextRankCost = ULTIMATE_RANK_COST[progress.ultimateRank]
+  const canUpgradeUltimate = progress.ultimateRank < ULTIMATE_MAX_RANK && totalSkillPoints >= nextRankCost
   const [members, setMembers] = useState<{ id: string; name: string; color: string }[]>([])
   const isHost = !room || room.isHost
 
@@ -91,6 +112,25 @@ export default function CampScreen({
           {!isHost && <p className="hint">Esperando a que el líder de la sala elija la misión...</p>}
         </div>
       )}
+
+      <section className="camp-section ultimate-section">
+        <h2>Habilidad — {cls.ultimateName}</h2>
+        <p className="hint">{cls.description}</p>
+        <div className="ultimate-rank-row">
+          {Array.from({ length: ULTIMATE_MAX_RANK }, (_, i) => (
+            <span key={i} className={`rank-pip ${i < progress.ultimateRank ? 'filled' : ''}`} style={i < progress.ultimateRank ? { background: cls.color, borderColor: cls.color } : undefined} />
+          ))}
+          <span className="rank-label">Rango {progress.ultimateRank} / {ULTIMATE_MAX_RANK}</span>
+        </div>
+        <p className="hint">
+          {progress.ultimateRank >= ULTIMATE_MAX_RANK
+            ? 'Habilidad al máximo — más área, más duración y menos cooldown.'
+            : `Punto de habilidad: ${totalSkillPoints} disponibles (ganás 1 por nivel) · próximo rango cuesta ${nextRankCost}.`}
+        </p>
+        <button className="btn-secondary" disabled={!canUpgradeUltimate} onClick={onUpgradeUltimate}>
+          {progress.ultimateRank >= ULTIMATE_MAX_RANK ? 'Habilidad al máximo' : 'Mejorar habilidad'}
+        </button>
+      </section>
 
       <div className="camp-columns">
         <section className="camp-section">

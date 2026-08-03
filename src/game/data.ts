@@ -57,6 +57,23 @@ export function getClass(id: string): ClassDef {
   return CLASSES.find((c) => c.id === id) ?? CLASSES[0]
 }
 
+// Progresión de la habilidad definitiva: subís de nivel, ganás puntos de
+// habilidad, y los invertís en mejorar tu ulti (más área/duración, menos cooldown).
+export const ULTIMATE_MAX_RANK = 3
+export const ULTIMATE_RANK_COST = [0, 1, 3] // costo acumulado de puntos para tener rango 1, 2 y 3
+
+export function skillPointsForLevel(level: number): number {
+  return Math.max(0, level - 1)
+}
+
+export function ultimatePowerMult(rank: number): number {
+  return 1 + (rank - 1) * 0.25
+}
+
+export function ultimateCooldownMult(rank: number): number {
+  return 1 - (rank - 1) * 0.15
+}
+
 export const MISSIONS: MissionDef[] = [
   { id: 'oleadas_cuerno', title: 'El Cuerno de Helm', description: 'Resistí 6 oleadas de orcos y derrotá a Ugluk al final.', mode: 'oleadas', waveCount: 6 },
   { id: 'defensa_muro', title: 'El Muro del Abismo', description: 'Defendé el muro durante 4 minutos sin que caiga.', mode: 'defensa', durationSec: 240 },

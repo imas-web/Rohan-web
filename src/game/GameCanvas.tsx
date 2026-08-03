@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { MissionDef, EnemyInstance, Vec2 } from './types'
-import { ENEMIES, getArmor, getClass, getWeapon, xpToNextLevel } from './data'
+import { ENEMIES, getArmor, getClass, getWeapon, ultimateCooldownMult, ultimatePowerMult, xpToNextLevel } from './data'
 import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supabase/multiplayer'
 import HUD, { type HudState } from '../ui/HUD'
 import TouchControls from '../ui/TouchControls'
@@ -19,6 +19,7 @@ interface LocalPlayer {
   weaponId: string
   armorId: string
   classId: string
+  ultimateRank: number
   attackCooldownLeft: number
   attackAnim: number
   hitFlash: number
@@ -87,6 +88,7 @@ export interface GameCanvasProps {
   localName: string
   localColor: string
   classId: string
+  ultimateRank: number
   weaponId: string
   armorId: string
   startLevel: number
@@ -127,6 +129,7 @@ export default function GameCanvas({
   localName,
   localColor,
   classId,
+  ultimateRank,
   weaponId,
   armorId,
   startLevel,
@@ -165,6 +168,7 @@ export default function GameCanvas({
     weaponId,
     armorId,
     classId,
+    ultimateRank,
     attackCooldownLeft: 0,
     attackAnim: 0,
     hitFlash: 0,
@@ -279,28 +283,31 @@ export default function GameCanvas({
     const lp = localRef.current
     if (!lp.alive || lp.ultimateCooldownLeft > 0) return
     const cls = getClass(lp.classId)
-    lp.ultimateCooldownLeft = cls.cooldown
+    const power = ultimatePowerMult(lp.ultimateRank)
+    lp.ultimateCooldownLeft = cls.cooldown * ultimateCooldownMult(lp.ultimateRank)
     const weapon = getWeapon(lp.weaponId)
 
     if (lp.classId === 'guerrero') {
+      const radius = ULTIMATE_GUERRERO_RADIUS * power
       enemiesRef.current.forEach((e, uid) => {
-        if (dist(lp.pos, e.pos) <= ULTIMATE_GUERRERO_RADIUS) {
+        if (dist(lp.pos, e.pos) <= radius) {
           const dmg = weapon.damage * 1.7 * (1 + lp.level * 0.025)
           if (isHostRef.current) applyHitToEnemy(uid, dmg, lp.id, lp.pos)
           else room?.sendHitRequest({ enemyUid: uid, damage: dmg, attackerId: lp.id, isCrit: false })
         }
       })
     } else if (lp.classId === 'cazador') {
+      const radius = ULTIMATE_CAZADOR_RADIUS * power
       enemiesRef.current.forEach((e, uid) => {
-        if (dist(lp.pos, e.pos) <= ULTIMATE_CAZADOR_RADIUS) {
+        if (dist(lp.pos, e.pos) <= radius) {
           const dmg = weapon.damage * 1.1 * (1 + lp.level * 0.025)
           if (isHostRef.current) applyHitToEnemy(uid, dmg, lp.id, lp.pos)
           else room?.sendHitRequest({ enemyUid: uid, damage: dmg, attackerId: lp.id, isCrit: false })
         }
       })
     } else if (lp.classId === 'guardian') {
-      lp.ultimateShieldUntil = performance.now() + ULTIMATE_SHIELD_DURATION * 1000
-      lp.hp = Math.min(lp.maxHp, lp.hp + lp.maxHp * 0.3)
+      lp.ultimateShieldUntil = performance.now() + ULTIMATE_SHIELD_DURATION * power * 1000
+      lp.hp = Math.min(lp.maxHp, lp.hp + lp.maxHp * 0.3 * power)
     }
 
     floatingRef.current.push({ pos: { ...lp.pos }, text: `¡${cls.ultimateName}!`, color: cls.color, life: 1.3, vy: -24 })
@@ -1079,7 +1086,7 @@ export default function GameCanvas({
         playersOnline: remotePlayersRef.current.size + 1,
         ultimateName: getClass(lp.classId).ultimateName,
         ultimateCooldownLeft: lp.ultimateCooldownLeft,
-        ultimateCooldownMax: getClass(lp.classId).cooldown,
+        ultimateCooldownMax: getClass(lp.classId).cooldown * ultimateCooldownMult(lp.ultimateRank),
       })
     }, 150)
 
