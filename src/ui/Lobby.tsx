@@ -1,6 +1,5 @@
 import { useEffect, useState, type MutableRefObject } from 'react'
 import type { Listeners, MultiplayerRoom } from '../supabase/multiplayer'
-import { randomRoomCode } from '../supabase/multiplayer'
 import { supabaseEnabled } from '../supabase/client'
 
 interface Member {
@@ -27,7 +26,7 @@ export default function Lobby({
   onConnected: (room: MultiplayerRoom) => void
   onBack: () => void
 }) {
-  const [step, setStep] = useState<'choose' | 'join-code' | 'connecting' | 'connected' | 'error'>('choose')
+  const [step, setStep] = useState<'enter' | 'connecting' | 'connected' | 'error'>('enter')
   const [code, setCode] = useState('')
   const [members, setMembers] = useState<Member[]>([])
   const [error, setError] = useState('')
@@ -40,7 +39,8 @@ export default function Lobby({
     }
   }, [listenersRef])
 
-  async function connectTo(roomCode: string) {
+  async function connectTo(rawPassword: string) {
+    const roomCode = rawPassword.trim().replace(/\s+/g, '_').replace(/[^A-Za-z0-9_-]/g, '')
     setStep('connecting')
     setError('')
     try {
@@ -75,31 +75,25 @@ export default function Lobby({
       <div className="menu-card">
         <h2>Partida en grupo</h2>
 
-        {step === 'choose' && (
+        {step === 'enter' && (
           <div className="menu-actions">
-            <button className="btn-primary" onClick={() => connectTo(randomRoomCode())}>
-              Crear sala nueva
-            </button>
-            <button className="btn-secondary" onClick={() => setStep('join-code')}>
-              Unirme con un código
-            </button>
-            <button className="btn-ghost" onClick={onBack}>Volver</button>
-          </div>
-        )}
-
-        {step === 'join-code' && (
-          <div className="menu-actions">
+            <label className="field-label" htmlFor="room-password">Contraseña de la partida</label>
             <input
+              id="room-password"
               className="text-input code-input"
-              maxLength={4}
-              placeholder="CÓDIGO"
+              maxLength={20}
+              placeholder="Ej: familia2026"
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
             />
-            <button className="btn-primary" disabled={code.length !== 4} onClick={() => connectTo(code)}>
-              Unirme
+            <p className="hint">
+              Poné la misma contraseña que tus compañeros para caer todos en la misma partida — no hace falta
+              registrarse ni crear nada por separado.
+            </p>
+            <button className="btn-primary" disabled={code.trim().length < 3} onClick={() => connectTo(code)}>
+              Buscar partida
             </button>
-            <button className="btn-ghost" onClick={() => setStep('choose')}>Volver</button>
+            <button className="btn-ghost" onClick={onBack}>Volver</button>
           </div>
         )}
 
@@ -108,16 +102,16 @@ export default function Lobby({
         {step === 'error' && (
           <>
             <p className="hint error-text">{error}</p>
-            <button className="btn-secondary" onClick={() => setStep('choose')}>Reintentar</button>
+            <button className="btn-secondary" onClick={() => setStep('enter')}>Reintentar</button>
           </>
         )}
 
         {step === 'connected' && activeRoom && (
           <>
             <p className="room-code-display">
-              Código de la sala: <strong>{activeRoom.roomCode}</strong>
+              Contraseña de la partida: <strong>{activeRoom.roomCode}</strong>
             </p>
-            <p className="hint">Compartí este código con hasta 3 amigos para que se unan desde su celular.</p>
+            <p className="hint">Compartí esta contraseña con hasta 3 amigos para que se unan desde su celular.</p>
             <ul className="member-list">
               {members.map((m) => (
                 <li key={m.id}>

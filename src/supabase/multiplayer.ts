@@ -149,13 +149,6 @@ export class MultiplayerRoom {
   }
 }
 
-export function randomRoomCode(): string {
-  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
-  let code = ''
-  for (let i = 0; i < 4; i++) code += letters[Math.floor(Math.random() * letters.length)]
-  return code
-}
-
 export function makePlayerId(): string {
   return 'p_' + Math.random().toString(36).slice(2, 10)
 }
