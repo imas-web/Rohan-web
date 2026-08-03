@@ -1,12 +1,15 @@
 import type { ArmorDef, ClassDef, EnemyDef, MissionDef, WeaponDef } from './types'
 
+// Los rangos de las armas del jugador son mayores al alcance de ataque de
+// cualquier enemigo cuerpo a cuerpo (incluido el jefe, 60) para que siempre
+// se pueda golpear y retroceder sin recibir el golpe de vuelta.
 export const WEAPONS: WeaponDef[] = [
-  { id: 'daga', name: 'Daga oxidada', rarity: 'comun', damage: 8, range: 46, attackSpeed: 2.6, critChance: 0.05 },
-  { id: 'espada_corta', name: 'Espada corta', rarity: 'comun', damage: 12, range: 52, attackSpeed: 1.8, critChance: 0.08 },
-  { id: 'espada_rohirrim', name: 'Espada de Rohirrim', rarity: 'raro', damage: 18, range: 56, attackSpeed: 1.6, critChance: 0.12 },
-  { id: 'hacha_guardia', name: 'Hacha de guardia', rarity: 'raro', damage: 24, range: 50, attackSpeed: 1.1, critChance: 0.1 },
-  { id: 'lanza_marca', name: 'Lanza de la Marca', rarity: 'epico', damage: 30, range: 68, attackSpeed: 1.3, critChance: 0.16 },
-  { id: 'hoja_helm', name: 'Hoja de Helm Guarnecido', rarity: 'legendario', damage: 42, range: 60, attackSpeed: 1.5, critChance: 0.25 },
+  { id: 'daga', name: 'Daga oxidada', rarity: 'comun', damage: 8, range: 64, attackSpeed: 2.6, critChance: 0.05 },
+  { id: 'espada_corta', name: 'Espada corta', rarity: 'comun', damage: 12, range: 70, attackSpeed: 1.8, critChance: 0.08 },
+  { id: 'espada_rohirrim', name: 'Espada de Rohirrim', rarity: 'raro', damage: 18, range: 78, attackSpeed: 1.6, critChance: 0.12 },
+  { id: 'hacha_guardia', name: 'Hacha de guardia', rarity: 'raro', damage: 24, range: 72, attackSpeed: 1.1, critChance: 0.1 },
+  { id: 'lanza_marca', name: 'Lanza de la Marca', rarity: 'epico', damage: 30, range: 100, attackSpeed: 1.3, critChance: 0.16 },
+  { id: 'hoja_helm', name: 'Hoja de Helm Guarnecido', rarity: 'legendario', damage: 42, range: 88, attackSpeed: 1.5, critChance: 0.25 },
 ]
 
 export const ARMORS: ArmorDef[] = [
@@ -19,11 +22,11 @@ export const ARMORS: ArmorDef[] = [
 ]
 
 export const ENEMIES: Record<string, EnemyDef> = {
-  orco_explorador: { id: 'orco_explorador', name: 'Orco explorador', hp: 24, damage: 6, speed: 78, radius: 14, xpReward: 8, color: '#7A8B5C', attackRange: 34, attackCooldown: 1.0 },
-  orco_guerrero: { id: 'orco_guerrero', name: 'Orco guerrero', hp: 42, damage: 10, speed: 62, radius: 16, xpReward: 14, color: '#5F6E43', attackRange: 36, attackCooldown: 1.1 },
-  arquero_uruk: { id: 'arquero_uruk', name: 'Arquero Uruk-hai', hp: 30, damage: 8, speed: 55, radius: 14, xpReward: 16, color: '#3E4A6B', ranged: true, attackRange: 260, attackCooldown: 1.6 },
-  berserker_uruk: { id: 'berserker_uruk', name: 'Berserker Uruk-hai', hp: 90, damage: 18, speed: 70, radius: 20, xpReward: 30, color: '#8B3A2B', attackRange: 42, attackCooldown: 1.3 },
-  jefe_ugluk: { id: 'jefe_ugluk', name: 'Ugluk, capitán Uruk-hai', hp: 900, damage: 26, speed: 58, radius: 34, xpReward: 400, color: '#C1502E', attackRange: 60, attackCooldown: 0.9, isBoss: true },
+  orco_explorador: { id: 'orco_explorador', name: 'Orco explorador', hp: 20, damage: 5, speed: 72, radius: 14, xpReward: 8, color: '#7A8B5C', attackRange: 34, attackCooldown: 1.0 },
+  orco_guerrero: { id: 'orco_guerrero', name: 'Orco guerrero', hp: 36, damage: 8, speed: 58, radius: 16, xpReward: 14, color: '#5F6E43', attackRange: 36, attackCooldown: 1.1 },
+  arquero_uruk: { id: 'arquero_uruk', name: 'Arquero Uruk-hai', hp: 26, damage: 6, speed: 52, radius: 14, xpReward: 16, color: '#3E4A6B', ranged: true, attackRange: 190, attackCooldown: 1.6 },
+  berserker_uruk: { id: 'berserker_uruk', name: 'Berserker Uruk-hai', hp: 75, damage: 14, speed: 66, radius: 20, xpReward: 30, color: '#8B3A2B', attackRange: 42, attackCooldown: 1.3 },
+  jefe_ugluk: { id: 'jefe_ugluk', name: 'Ugluk, capitán Uruk-hai', hp: 750, damage: 20, speed: 54, radius: 34, xpReward: 400, color: '#C1502E', attackRange: 60, attackCooldown: 0.9, isBoss: true },
 }
 
 export const CLASSES: ClassDef[] = [

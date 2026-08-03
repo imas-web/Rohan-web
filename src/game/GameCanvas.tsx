@@ -160,8 +160,8 @@ export default function GameCanvas({
     color: localColor,
     pos: { x: BASE_POS.x - 60, y: BASE_POS.y - 60 },
     facing: { x: 0, y: 1 },
-    hp: getArmor(armorId).hpBonus + 60,
-    maxHp: getArmor(armorId).hpBonus + 60,
+    hp: getArmor(armorId).hpBonus + 90,
+    maxHp: getArmor(armorId).hpBonus + 90,
     level: startLevel,
     xp: startXp,
     materials: startMaterials,
@@ -224,7 +224,7 @@ export default function GameCanvas({
     while (lp.xp >= xpToNextLevel(lp.level)) {
       lp.xp -= xpToNextLevel(lp.level)
       lp.level += 1
-      lp.maxHp += 8
+      lp.maxHp += 12
       lp.hp = lp.maxHp
       leveled = true
     }
@@ -415,10 +415,10 @@ export default function GameCanvas({
             spawnEnemy('jefe_ugluk', { x: WORLD_W / 2, y: 80 })
             floatingRef.current.push({ pos: { x: WORLD_W / 2, y: 200 }, text: '¡Ugluk ha llegado!', color: '#C1502E', life: 2, vy: -10 })
           } else {
-            const count = 3 + ms.wave * 2
+            const count = 2 + Math.floor(ms.wave * 1.5)
             for (let i = 0; i < count; i++) spawnEnemy(pickEnemyDefForWave(ms.wave, false), randomEdgeSpawnPos())
             ms.wave += 1
-            ms.waveClearedPause = 2.5
+            ms.waveClearedPause = 3.5
           }
         } else if (ms.bossSpawned && aliveEnemies === 0) {
           ms.finished = true
@@ -427,9 +427,9 @@ export default function GameCanvas({
       } else if (mission.mode === 'defensa') {
         ms.timeLeft -= dt
         ms.spawnTimer -= dt
-        const intensity = 1 + (mission.durationSec! - ms.timeLeft) / 45
+        const intensity = 1 + (mission.durationSec! - ms.timeLeft) / 70
         if (ms.spawnTimer <= 0) {
-          ms.spawnTimer = Math.max(0.6, 2.2 / intensity)
+          ms.spawnTimer = Math.max(0.9, 2.6 / intensity)
           spawnEnemy(pickEnemyDefForWave(Math.floor(intensity), true), randomEdgeSpawnPos())
         }
         if (ms.baseHp <= 0) {
@@ -441,8 +441,8 @@ export default function GameCanvas({
         }
       } else if (mission.mode === 'mision') {
         ms.spawnTimer -= dt
-        if (ms.spawnTimer <= 0 && enemiesRef.current.size < 10) {
-          ms.spawnTimer = 1.4
+        if (ms.spawnTimer <= 0 && enemiesRef.current.size < 8) {
+          ms.spawnTimer = 1.7
           spawnEnemy(pickEnemyDefForWave(2, false), randomEdgeSpawnPos())
         }
         if (ms.kills >= (mission.killTarget ?? 40)) {
