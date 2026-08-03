@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
-import type { MissionDef, EnemyInstance, Vec2 } from './types'
+import type { MissionDef, EnemyInstance, Vec2, WeaponShape } from './types'
 import { ENEMIES, getArmor, getClass, getWeapon, ultimateCooldownMult, ultimatePowerMult, xpToNextLevel } from './data'
 import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supabase/multiplayer'
 import HUD, { type HudState } from '../ui/HUD'
@@ -52,6 +52,14 @@ interface FloatingText {
   life: number
   vy: number
 }
+
+interface ArrowVisual {
+  from: Vec2
+  to: Vec2
+  t: number
+}
+
+const ARROW_FLIGHT_TIME = 0.28
 
 const WORLD_W = 2200
 const WORLD_H = 1600
@@ -181,6 +189,8 @@ export default function GameCanvas({
   const remotePlayersRef = useRef<Map<string, RemotePlayer>>(new Map())
   const enemiesRef = useRef<Map<string, EnemyInstance>>(new Map())
   const floatingRef = useRef<FloatingText[]>([])
+  const arrowsRef = useRef<ArrowVisual[]>([])
+  const pendingShotRef = useRef<{ fromX: number; fromY: number; toX: number; toY: number } | null>(null)
   const keysRef = useRef<Record<string, boolean>>({})
   const joystickRef = useRef<Vec2>({ x: 0, y: 0 })
   const attackHeldRef = useRef(false)
@@ -514,6 +524,11 @@ export default function GameCanvas({
           e.attackCooldownLeft -= dt
           if (e.attackCooldownLeft <= 0) {
             e.attackCooldownLeft = def.attackCooldown
+            if (def.ranged) {
+              const shot = { fromX: e.pos.x, fromY: e.pos.y, toX: targetPos.x, toY: targetPos.y }
+              pendingShotRef.current = shot
+              arrowsRef.current.push({ from: { x: shot.fromX, y: shot.fromY }, to: { x: shot.toX, y: shot.toY }, t: 0 })
+            }
             if (targetIsBase) {
               missionStateRef.current.baseHp = Math.max(0, missionStateRef.current.baseHp - def.damage)
             } else if (e.targetId === localRef.current.id) {
@@ -605,8 +620,10 @@ export default function GameCanvas({
           finished: ms.finished,
           victory: ms.victory,
           lastKill: pendingKillAnnounceRef.current ?? undefined,
+          lastShot: pendingShotRef.current ?? undefined,
         })
         pendingKillAnnounceRef.current = null
+        pendingShotRef.current = null
       }
 
       // Actualizar textos flotantes
@@ -614,6 +631,11 @@ export default function GameCanvas({
       floatingRef.current.forEach((f) => {
         f.life -= dt
         f.pos = { x: f.pos.x, y: f.pos.y + f.vy * dt }
+      })
+
+      arrowsRef.current = arrowsRef.current.filter((a) => a.t < 1)
+      arrowsRef.current.forEach((a) => {
+        a.t = Math.min(1, a.t + dt / ARROW_FLIGHT_TIME)
       })
 
       render()
@@ -723,11 +745,11 @@ export default function GameCanvas({
 
       // jugadores remotos
       remotePlayersRef.current.forEach((rp) => {
-        drawPlayer(ctx, rp.pos, rp.facing, rp.color, rp.name, rp.hp, rp.maxHp, false, rp.attacking, rp.blocking)
+        drawPlayer(ctx, rp.pos, rp.facing, rp.color, rp.name, rp.hp, rp.maxHp, false, rp.attacking, rp.blocking, rp.weaponId)
       })
 
       // jugador local
-      drawPlayer(ctx, lp.pos, lp.facing, lp.color, lp.name + ' (vos)', lp.hp, lp.maxHp, true, lp.attackAnim > 0, lp.blocking)
+      drawPlayer(ctx, lp.pos, lp.facing, lp.color, lp.name + ' (vos)', lp.hp, lp.maxHp, true, lp.attackAnim > 0, lp.blocking, lp.weaponId)
       if (lp.hitFlash > 0) {
         ctx.beginPath()
         ctx.arc(lp.pos.x, lp.pos.y, 26, 0, Math.PI * 2)
@@ -747,6 +769,38 @@ export default function GameCanvas({
         ctx.lineWidth = 2
         ctx.stroke()
       }
+
+      // flechas en vuelo
+      arrowsRef.current.forEach((a) => {
+        const x = a.from.x + (a.to.x - a.from.x) * a.t
+        const y = a.from.y + (a.to.y - a.from.y) * a.t
+        const angle = Math.atan2(a.to.y - a.from.y, a.to.x - a.from.x)
+        ctx.save()
+        ctx.translate(x, y)
+        ctx.rotate(angle)
+        ctx.strokeStyle = '#D9CBA0'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(-14, 0)
+        ctx.lineTo(8, 0)
+        ctx.stroke()
+        ctx.fillStyle = '#8A7A5C'
+        ctx.beginPath()
+        ctx.moveTo(8, 0)
+        ctx.lineTo(2, -3.5)
+        ctx.lineTo(2, 3.5)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(232,223,200,0.7)'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.moveTo(-14, 0)
+        ctx.lineTo(-9, -4)
+        ctx.moveTo(-14, 0)
+        ctx.lineTo(-9, 4)
+        ctx.stroke()
+        ctx.restore()
+      })
 
       // textos flotantes
       floatingRef.current.forEach((f) => {
@@ -913,7 +967,8 @@ export default function GameCanvas({
       maxHp: number,
       isLocal: boolean,
       attacking: boolean,
-      blocking: boolean
+      blocking: boolean,
+      weaponId: string
     ) {
       if (attacking) {
         c.beginPath()
@@ -924,8 +979,11 @@ export default function GameCanvas({
         c.stroke()
         c.globalAlpha = 1
       }
+      const weapon = getWeapon(weaponId)
       drawHumanoid(c, pos, facing, 18, color, '#E8DFC8', isLocal ? '#E8DFC8' : 'rgba(232,223,200,0.6)', isLocal ? 3 : 2, false, {
         shield: blocking,
+        weaponShape: weapon.shape,
+        legendary: weapon.rarity === 'legendario',
       })
       drawBar(pos.x - 22, pos.y - 34, 44, 6, Math.max(0, hp) / maxHp, '#7FD1AE')
       c.fillStyle = blocking ? '#4C6B8A' : '#E8DFC8'
@@ -951,7 +1009,7 @@ export default function GameCanvas({
       outlineColor: string,
       outlineWidth: number,
       flash: boolean,
-      extras: { horns?: boolean; crown?: boolean; shield?: boolean; bow?: boolean }
+      extras: { horns?: boolean; crown?: boolean; shield?: boolean; bow?: boolean; weaponShape?: WeaponShape; legendary?: boolean }
     ) {
       const dir = facing.x === 0 && facing.y === 0 ? { x: 0, y: 1 } : facing
       const fillColor = flash ? '#FFFFFF' : bodyColor
@@ -1025,6 +1083,7 @@ export default function GameCanvas({
       c.save()
       c.translate(pos.x, pos.y)
       c.rotate(angle)
+      const bladeColor = extras.legendary ? '#C9A227' : '#B8B0A0'
       if (extras.bow) {
         c.strokeStyle = '#8A6A3E'
         c.lineWidth = 2
@@ -1038,8 +1097,43 @@ export default function GameCanvas({
         c.lineTo(radius * 1.55, 0)
         c.lineTo(radius * 0.9, radius * 0.66)
         c.stroke()
+      } else if (extras.weaponShape === 'dagger') {
+        c.strokeStyle = bladeColor
+        c.lineWidth = Math.max(2, radius * 0.14)
+        c.beginPath()
+        c.moveTo(radius * 0.45, 0)
+        c.lineTo(radius * 1.15, 0)
+        c.stroke()
+      } else if (extras.weaponShape === 'axe') {
+        c.strokeStyle = '#8A7A5C'
+        c.lineWidth = Math.max(2, radius * 0.14)
+        c.beginPath()
+        c.moveTo(radius * 0.4, 0)
+        c.lineTo(radius * 1.5, 0)
+        c.stroke()
+        c.beginPath()
+        c.moveTo(radius * 1.5, -radius * 0.1)
+        c.quadraticCurveTo(radius * 2.05, -radius * 0.55, radius * 1.55, -radius * 0.8)
+        c.quadraticCurveTo(radius * 1.3, -radius * 0.4, radius * 1.28, 0)
+        c.closePath()
+        c.fillStyle = bladeColor
+        c.fill()
+      } else if (extras.weaponShape === 'spear') {
+        c.strokeStyle = '#8A7A5C'
+        c.lineWidth = Math.max(2, radius * 0.11)
+        c.beginPath()
+        c.moveTo(radius * 0.3, 0)
+        c.lineTo(radius * 1.9, 0)
+        c.stroke()
+        c.beginPath()
+        c.moveTo(radius * 1.9, -radius * 0.2)
+        c.lineTo(radius * 2.3, 0)
+        c.lineTo(radius * 1.9, radius * 0.2)
+        c.closePath()
+        c.fillStyle = bladeColor
+        c.fill()
       } else {
-        c.strokeStyle = '#B8B0A0'
+        c.strokeStyle = bladeColor
         c.lineWidth = Math.max(2, radius * 0.16)
         c.beginPath()
         c.moveTo(radius * 0.4, 0)
@@ -1132,6 +1226,10 @@ export default function GameCanvas({
       }
       if (payload.lastKill && payload.lastKill.killerId === localRef.current.id) {
         grantXpAndMaterials(payload.lastKill.xpReward, payload.lastKill.materialsDrop, payload.lastKill.enemyName)
+      }
+      if (payload.lastShot) {
+        const s = payload.lastShot
+        arrowsRef.current.push({ from: { x: s.fromX, y: s.fromY }, to: { x: s.toX, y: s.toY }, t: 0 })
       }
     }
     listenersRef.current.onHitRequest = (p) => {

@@ -1,5 +1,7 @@
 export type Rarity = 'comun' | 'raro' | 'epico' | 'legendario'
 
+export type WeaponShape = 'dagger' | 'sword' | 'axe' | 'spear'
+
 export interface WeaponDef {
   id: string
   name: string
@@ -8,6 +10,7 @@ export interface WeaponDef {
   range: number
   attackSpeed: number // ataques por segundo
   critChance: number // 0..1
+  shape: WeaponShape
 }
 
 export interface ArmorDef {

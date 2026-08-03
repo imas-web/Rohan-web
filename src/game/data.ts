@@ -4,12 +4,12 @@ import type { ArmorDef, ClassDef, EnemyDef, MissionDef, WeaponDef } from './type
 // cualquier enemigo cuerpo a cuerpo (incluido el jefe, 60) para que siempre
 // se pueda golpear y retroceder sin recibir el golpe de vuelta.
 export const WEAPONS: WeaponDef[] = [
-  { id: 'daga', name: 'Daga oxidada', rarity: 'comun', damage: 8, range: 64, attackSpeed: 2.6, critChance: 0.05 },
-  { id: 'espada_corta', name: 'Espada corta', rarity: 'comun', damage: 12, range: 70, attackSpeed: 1.8, critChance: 0.08 },
-  { id: 'espada_rohirrim', name: 'Espada de Rohirrim', rarity: 'raro', damage: 18, range: 78, attackSpeed: 1.6, critChance: 0.12 },
-  { id: 'hacha_guardia', name: 'Hacha de guardia', rarity: 'raro', damage: 24, range: 72, attackSpeed: 1.1, critChance: 0.1 },
-  { id: 'lanza_marca', name: 'Lanza de la Marca', rarity: 'epico', damage: 30, range: 100, attackSpeed: 1.3, critChance: 0.16 },
-  { id: 'hoja_helm', name: 'Hoja de Helm Guarnecido', rarity: 'legendario', damage: 42, range: 88, attackSpeed: 1.5, critChance: 0.25 },
+  { id: 'daga', name: 'Daga oxidada', rarity: 'comun', damage: 8, range: 64, attackSpeed: 2.6, critChance: 0.05, shape: 'dagger' },
+  { id: 'espada_corta', name: 'Espada corta', rarity: 'comun', damage: 12, range: 70, attackSpeed: 1.8, critChance: 0.08, shape: 'sword' },
+  { id: 'espada_rohirrim', name: 'Espada de Rohirrim', rarity: 'raro', damage: 18, range: 78, attackSpeed: 1.6, critChance: 0.12, shape: 'sword' },
+  { id: 'hacha_guardia', name: 'Hacha de guardia', rarity: 'raro', damage: 24, range: 72, attackSpeed: 1.1, critChance: 0.1, shape: 'axe' },
+  { id: 'lanza_marca', name: 'Lanza de la Marca', rarity: 'epico', damage: 30, range: 100, attackSpeed: 1.3, critChance: 0.16, shape: 'spear' },
+  { id: 'hoja_helm', name: 'Hoja de Helm Guarnecido', rarity: 'legendario', damage: 42, range: 88, attackSpeed: 1.5, critChance: 0.25, shape: 'sword' },
 ]
 
 export const ARMORS: ArmorDef[] = [

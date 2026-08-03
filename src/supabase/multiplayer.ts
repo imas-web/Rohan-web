@@ -41,6 +41,7 @@ export interface EnemySyncPayload {
   finished?: boolean
   victory?: boolean
   lastKill?: { killerId: string; xpReward: number; enemyName: string; enemyUid: string; materialsDrop: number }
+  lastShot?: { fromX: number; fromY: number; toX: number; toY: number }
 }
 
 export interface HitRequestPayload {
