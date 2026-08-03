@@ -51,6 +51,30 @@ const BASE_POS: Vec2 = { x: WORLD_W / 2, y: WORLD_H / 2 }
 const BASE_MAX_HP = 1000
 const BASE_ATTACK_RANGE = 46
 
+// Geometría del castillo: un patio amurallado cuadrado centrado en BASE_POS,
+// con una torre en cada esquina y una puerta en el medio de cada muro.
+const CASTLE_CX = BASE_POS.x
+const CASTLE_CY = BASE_POS.y
+const CASTLE_R_OUT = 280
+const CASTLE_WALL_THICK = 34
+const CASTLE_R_IN = CASTLE_R_OUT - CASTLE_WALL_THICK
+const CASTLE_GATE_HALF = 70
+
+// Colisión simple contra el muro: bloquea el movimiento salvo en las 4 puertas,
+// lo que hace que jugadores y enemigos "resbalen" por el muro hasta encontrar una.
+function isBlockedByWall(pos: Vec2): boolean {
+  const ax = Math.abs(pos.x - CASTLE_CX)
+  const ay = Math.abs(pos.y - CASTLE_CY)
+  if (ax > CASTLE_R_OUT || ay > CASTLE_R_OUT) return false
+  if (ax <= CASTLE_R_IN && ay <= CASTLE_R_IN) return false
+  const inNorthSouthBand = ay > CASTLE_R_IN
+  const inEastWestBand = ax > CASTLE_R_IN
+  if (inNorthSouthBand && inEastWestBand) return true
+  if (inNorthSouthBand) return ax > CASTLE_GATE_HALF
+  if (inEastWestBand) return ay > CASTLE_GATE_HALF
+  return false
+}
+
 export interface GameCanvasProps {
   mission: MissionDef
   localName: string
@@ -425,7 +449,13 @@ export default function GameCanvas({
         const attackRange = targetIsBase ? BASE_ATTACK_RANGE : def.attackRange
         if (d > attackRange) {
           const dir = normalize({ x: targetPos.x - e.pos.x, y: targetPos.y - e.pos.y })
-          e.pos = { x: e.pos.x + dir.x * def.speed * dt, y: e.pos.y + dir.y * def.speed * dt }
+          const targetX = e.pos.x + dir.x * def.speed * dt
+          const targetY = e.pos.y + dir.y * def.speed * dt
+          let nx = e.pos.x
+          let ny = e.pos.y
+          if (!isBlockedByWall({ x: targetX, y: e.pos.y })) nx = targetX
+          if (!isBlockedByWall({ x: nx, y: targetY })) ny = targetY
+          e.pos = { x: nx, y: ny }
         } else {
           e.attackCooldownLeft -= dt
           if (e.attackCooldownLeft <= 0) {
@@ -458,10 +488,13 @@ export default function GameCanvas({
       const speed = 150 * armor.speedMod * (1 + lp.level * 0.004) * (lp.blocking ? BLOCK_SPEED_MULT : 1)
       if (mv.x !== 0 || mv.y !== 0) {
         lp.facing = mv
-        lp.pos = {
-          x: Math.min(WORLD_W - 20, Math.max(20, lp.pos.x + mv.x * speed * dt)),
-          y: Math.min(WORLD_H - 20, Math.max(20, lp.pos.y + mv.y * speed * dt)),
-        }
+        const targetX = Math.min(WORLD_W - 20, Math.max(20, lp.pos.x + mv.x * speed * dt))
+        const targetY = Math.min(WORLD_H - 20, Math.max(20, lp.pos.y + mv.y * speed * dt))
+        let nx = lp.pos.x
+        let ny = lp.pos.y
+        if (!isBlockedByWall({ x: targetX, y: lp.pos.y })) nx = targetX
+        if (!isBlockedByWall({ x: nx, y: targetY })) ny = targetY
+        lp.pos = { x: nx, y: ny }
       }
       if (lp.attackCooldownLeft > 0) lp.attackCooldownLeft -= dt
       if (lp.attackAnim > 0) lp.attackAnim -= dt
@@ -588,21 +621,18 @@ export default function GameCanvas({
       ctx.lineWidth = 6
       ctx.strokeRect(3, 3, WORLD_W - 6, WORLD_H - 6)
 
-      // base (si aplica)
+      // castillo: patio amurallado con torres y puertas, siempre presente
+      drawCastle()
+
+      // torreón central: siempre visible; solo muestra vida cuando hay que defenderlo
+      drawKeep()
       if (mission.mode === 'defensa') {
         const ms = missionStateRef.current
-        ctx.beginPath()
-        ctx.arc(BASE_POS.x, BASE_POS.y, 44, 0, Math.PI * 2)
-        ctx.fillStyle = '#3A3226'
-        ctx.fill()
-        ctx.strokeStyle = '#C9A227'
-        ctx.lineWidth = 4
-        ctx.stroke()
         ctx.fillStyle = '#E8DFC8'
         ctx.font = 'bold 13px Cinzel, serif'
         ctx.textAlign = 'center'
-        ctx.fillText('MURO', BASE_POS.x, BASE_POS.y + 5)
-        drawBar(BASE_POS.x - 50, BASE_POS.y - 68, 100, 10, ms.baseHp / BASE_MAX_HP, '#C1502E')
+        ctx.fillText('FORTALEZA', BASE_POS.x, BASE_POS.y + 5)
+        drawBar(BASE_POS.x - 50, BASE_POS.y - 90, 100, 10, ms.baseHp / BASE_MAX_HP, '#C1502E')
       }
 
       // enemigos
@@ -662,6 +692,137 @@ export default function GameCanvas({
       })
 
       ctx.restore()
+    }
+
+    function drawCrenellations(x: number, y: number, w: number, h: number, orientation: 'h' | 'v', outerSide: -1 | 1) {
+      const size = 10
+      const gap = 15
+      ctx.fillStyle = '#4A4438'
+      if (orientation === 'h') {
+        for (let px = x + 4; px < x + w - size; px += gap) {
+          ctx.fillRect(px, outerSide < 0 ? y - size : y + h, size, size)
+        }
+      } else {
+        for (let py = y + 4; py < y + h - size; py += gap) {
+          ctx.fillRect(outerSide < 0 ? x - size : x + w, py, size, size)
+        }
+      }
+    }
+
+    function drawTower(cx: number, cy: number) {
+      const r = CASTLE_WALL_THICK * 1.5
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.fillStyle = '#57503F'
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)'
+      ctx.lineWidth = 2
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2)
+      ctx.fillStyle = '#3A3226'
+      ctx.fill()
+      ctx.strokeStyle = '#8A7A5C'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(cx, cy - r * 0.55)
+      ctx.lineTo(cx, cy - r * 1.7)
+      ctx.stroke()
+      ctx.fillStyle = '#C9A227'
+      ctx.beginPath()
+      ctx.moveTo(cx, cy - r * 1.7)
+      ctx.lineTo(cx + r * 0.9, cy - r * 1.45)
+      ctx.lineTo(cx, cy - r * 1.2)
+      ctx.closePath()
+      ctx.fill()
+    }
+
+    function drawCastle() {
+      const cx = CASTLE_CX
+      const cy = CASTLE_CY
+      const rOut = CASTLE_R_OUT
+      const rIn = CASTLE_R_IN
+      const gh = CASTLE_GATE_HALF
+      const t = CASTLE_WALL_THICK
+
+      // patio empedrado
+      ctx.fillStyle = '#262019'
+      ctx.fillRect(cx - rIn, cy - rIn, rIn * 2, rIn * 2)
+      ctx.strokeStyle = 'rgba(232, 223, 200, 0.06)'
+      ctx.lineWidth = 1
+      for (let x = -rIn; x <= rIn; x += 40) {
+        ctx.beginPath()
+        ctx.moveTo(cx + x, cy - rIn)
+        ctx.lineTo(cx + x, cy + rIn)
+        ctx.stroke()
+      }
+      for (let y = -rIn; y <= rIn; y += 40) {
+        ctx.beginPath()
+        ctx.moveTo(cx - rIn, cy + y)
+        ctx.lineTo(cx + rIn, cy + y)
+        ctx.stroke()
+      }
+
+      // muros: cada lado partido en dos segmentos alrededor de su puerta
+      const segs: { x: number; y: number; w: number; h: number; orientation: 'h' | 'v'; outerSide: -1 | 1 }[] = [
+        { x: cx - rOut, y: cy - rOut, w: rOut - gh, h: t, orientation: 'h', outerSide: -1 },
+        { x: cx + gh, y: cy - rOut, w: rOut - gh, h: t, orientation: 'h', outerSide: -1 },
+        { x: cx - rOut, y: cy + rIn, w: rOut - gh, h: t, orientation: 'h', outerSide: 1 },
+        { x: cx + gh, y: cy + rIn, w: rOut - gh, h: t, orientation: 'h', outerSide: 1 },
+        { x: cx - rOut, y: cy - rOut, w: t, h: rOut - gh, orientation: 'v', outerSide: -1 },
+        { x: cx - rOut, y: cy + gh, w: t, h: rOut - gh, orientation: 'v', outerSide: -1 },
+        { x: cx + rIn, y: cy - rOut, w: t, h: rOut - gh, orientation: 'v', outerSide: 1 },
+        { x: cx + rIn, y: cy + gh, w: t, h: rOut - gh, orientation: 'v', outerSide: 1 },
+      ]
+      segs.forEach((s) => {
+        ctx.fillStyle = '#4A4438'
+        ctx.fillRect(s.x, s.y, s.w, s.h)
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'
+        ctx.lineWidth = 2
+        ctx.strokeRect(s.x, s.y, s.w, s.h)
+        drawCrenellations(s.x, s.y, s.w, s.h, s.orientation, s.outerSide)
+      })
+
+      // umbrales de las 4 puertas
+      ctx.fillStyle = '#2B2118'
+      ctx.fillRect(cx - gh, cy - rOut, gh * 2, t)
+      ctx.fillRect(cx - gh, cy + rIn, gh * 2, t)
+      ctx.fillRect(cx - rOut, cy - gh, t, gh * 2)
+      ctx.fillRect(cx + rIn, cy - gh, t, gh * 2)
+
+      // torres en las 4 esquinas
+      drawTower(cx - rOut, cy - rOut)
+      drawTower(cx + rOut, cy - rOut)
+      drawTower(cx - rOut, cy + rOut)
+      drawTower(cx + rOut, cy + rOut)
+    }
+
+    function drawKeep() {
+      const { x, y } = BASE_POS
+      ctx.beginPath()
+      ctx.arc(x, y, 50, 0, Math.PI * 2)
+      ctx.fillStyle = '#57503F'
+      ctx.fill()
+      ctx.strokeStyle = '#C9A227'
+      ctx.lineWidth = 4
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(x, y, 30, 0, Math.PI * 2)
+      ctx.fillStyle = '#3A3226'
+      ctx.fill()
+      ctx.strokeStyle = '#8A7A5C'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(x, y - 30)
+      ctx.lineTo(x, y - 72)
+      ctx.stroke()
+      ctx.fillStyle = '#C9A227'
+      ctx.beginPath()
+      ctx.moveTo(x, y - 72)
+      ctx.lineTo(x + 26, y - 62)
+      ctx.lineTo(x, y - 52)
+      ctx.closePath()
+      ctx.fill()
     }
 
     function drawBar(x: number, y: number, w: number, h: number, pct: number, color: string) {
