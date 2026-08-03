@@ -36,6 +36,8 @@ const ULTIMATE_SHIELD_DAMAGE_MULT = 0.08
 const ULTIMATE_SHIELD_DURATION = 4
 const ULTIMATE_GUERRERO_RADIUS = 150
 const ULTIMATE_CAZADOR_RADIUS = 280
+const ATTACK_SWING_DURATION = 0.18
+const ATTACK_SWING_MAX_ANGLE = 1.15
 
 function damageReductionFromDefense(defense: number) {
   return defense / (defense + 50)
@@ -190,6 +192,7 @@ export default function GameCanvas({
   const enemiesRef = useRef<Map<string, EnemyInstance>>(new Map())
   const floatingRef = useRef<FloatingText[]>([])
   const arrowsRef = useRef<ArrowVisual[]>([])
+  const remoteSwingRef = useRef<Map<string, number>>(new Map())
   const pendingShotRef = useRef<{ fromX: number; fromY: number; toX: number; toY: number } | null>(null)
   const keysRef = useRef<Record<string, boolean>>({})
   const joystickRef = useRef<Vec2>({ x: 0, y: 0 })
@@ -638,7 +641,7 @@ export default function GameCanvas({
         a.t = Math.min(1, a.t + dt / ARROW_FLIGHT_TIME)
       })
 
-      render()
+      render(dt)
 
       if (missionStateRef.current.finished && !result) {
         const lp = localRef.current
@@ -660,7 +663,7 @@ export default function GameCanvas({
       raf = requestAnimationFrame(loop)
     }
 
-    function render() {
+    function render(dt: number) {
       const w = canvas.width
       const h = canvas.height
       const lp = localRef.current
@@ -745,11 +748,13 @@ export default function GameCanvas({
 
       // jugadores remotos
       remotePlayersRef.current.forEach((rp) => {
-        drawPlayer(ctx, rp.pos, rp.facing, rp.color, rp.name, rp.hp, rp.maxHp, false, rp.attacking, rp.blocking, rp.weaponId)
+        const swingT = getRemoteSwingT(rp.id, rp.attacking, dt)
+        drawPlayer(ctx, rp.pos, rp.facing, rp.color, rp.name, rp.hp, rp.maxHp, false, swingT, rp.blocking, rp.weaponId)
       })
 
       // jugador local
-      drawPlayer(ctx, lp.pos, lp.facing, lp.color, lp.name + ' (vos)', lp.hp, lp.maxHp, true, lp.attackAnim > 0, lp.blocking, lp.weaponId)
+      const localSwingT = lp.attackAnim > 0 ? 1 - lp.attackAnim / ATTACK_SWING_DURATION : 0
+      drawPlayer(ctx, lp.pos, lp.facing, lp.color, lp.name + ' (vos)', lp.hp, lp.maxHp, true, localSwingT, lp.blocking, lp.weaponId)
       if (lp.hitFlash > 0) {
         ctx.beginPath()
         ctx.arc(lp.pos.x, lp.pos.y, 26, 0, Math.PI * 2)
@@ -946,6 +951,17 @@ export default function GameCanvas({
       ctx.fill()
     }
 
+    function getRemoteSwingT(id: string, attacking: boolean, dt: number): number {
+      const timers = remoteSwingRef.current
+      if (!attacking) {
+        timers.delete(id)
+        return 0
+      }
+      const elapsed = Math.min(ATTACK_SWING_DURATION, (timers.get(id) ?? 0) + dt)
+      timers.set(id, elapsed)
+      return elapsed / ATTACK_SWING_DURATION
+    }
+
     function drawBar(x: number, y: number, w: number, h: number, pct: number, color: string) {
       pct = Math.max(0, Math.min(1, pct))
       ctx.fillStyle = 'rgba(0,0,0,0.55)'
@@ -966,11 +982,11 @@ export default function GameCanvas({
       hp: number,
       maxHp: number,
       isLocal: boolean,
-      attacking: boolean,
+      swingT: number,
       blocking: boolean,
       weaponId: string
     ) {
-      if (attacking) {
+      if (swingT > 0) {
         c.beginPath()
         c.arc(pos.x, pos.y, 34, 0, Math.PI * 2)
         c.strokeStyle = color
@@ -982,6 +998,7 @@ export default function GameCanvas({
       const weapon = getWeapon(weaponId)
       drawHumanoid(c, pos, facing, 18, color, '#E8DFC8', isLocal ? '#E8DFC8' : 'rgba(232,223,200,0.6)', isLocal ? 3 : 2, false, {
         shield: blocking,
+        swingT,
         weaponShape: weapon.shape,
         legendary: weapon.rarity === 'legendario',
       })
@@ -1009,7 +1026,7 @@ export default function GameCanvas({
       outlineColor: string,
       outlineWidth: number,
       flash: boolean,
-      extras: { horns?: boolean; crown?: boolean; shield?: boolean; bow?: boolean; weaponShape?: WeaponShape; legendary?: boolean }
+      extras: { horns?: boolean; crown?: boolean; shield?: boolean; bow?: boolean; weaponShape?: WeaponShape; legendary?: boolean; swingT?: number }
     ) {
       const dir = facing.x === 0 && facing.y === 0 ? { x: 0, y: 1 } : facing
       const fillColor = flash ? '#FFFFFF' : bodyColor
@@ -1078,11 +1095,13 @@ export default function GameCanvas({
         }
       }
 
-      // arma / arco, rotado según hacia dónde mira
+      // arma / arco, rotado según hacia dónde mira (y con arco de golpe si está atacando)
       const angle = Math.atan2(dir.y, dir.x)
+      const swingT = extras.swingT ?? 0
+      const swingOffset = extras.bow ? 0 : Math.sin(swingT * Math.PI) * ATTACK_SWING_MAX_ANGLE
       c.save()
       c.translate(pos.x, pos.y)
-      c.rotate(angle)
+      c.rotate(angle + swingOffset)
       const bladeColor = extras.legendary ? '#C9A227' : '#B8B0A0'
       if (extras.bow) {
         c.strokeStyle = '#8A6A3E'
