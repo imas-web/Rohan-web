@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { MissionDef, EnemyInstance, Vec2 } from './types'
-import { ENEMIES, getArmor, getWeapon, xpToNextLevel } from './data'
+import { ENEMIES, getArmor, getClass, getWeapon, xpToNextLevel } from './data'
 import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supabase/multiplayer'
 import HUD, { type HudState } from '../ui/HUD'
 import TouchControls from '../ui/TouchControls'
@@ -18,16 +18,23 @@ interface LocalPlayer {
   materials: number
   weaponId: string
   armorId: string
+  classId: string
   attackCooldownLeft: number
   attackAnim: number
   hitFlash: number
   alive: boolean
   blocking: boolean
+  ultimateCooldownLeft: number
+  ultimateShieldUntil: number
 }
 
-const BLOCK_SPEED_MULT = 0.4
-const BLOCK_DAMAGE_MULT = 0.3
-const ENEMY_TELEGRAPH_WINDOW = 0.3
+const BLOCK_SPEED_MULT = 0.5
+const BLOCK_DAMAGE_MULT = 0.22
+const ENEMY_TELEGRAPH_WINDOW = 0.45
+const ULTIMATE_SHIELD_DAMAGE_MULT = 0.08
+const ULTIMATE_SHIELD_DURATION = 4
+const ULTIMATE_GUERRERO_RADIUS = 150
+const ULTIMATE_CAZADOR_RADIUS = 280
 
 function damageReductionFromDefense(defense: number) {
   return defense / (defense + 50)
@@ -79,6 +86,7 @@ export interface GameCanvasProps {
   mission: MissionDef
   localName: string
   localColor: string
+  classId: string
   weaponId: string
   armorId: string
   startLevel: number
@@ -118,6 +126,7 @@ export default function GameCanvas({
   mission,
   localName,
   localColor,
+  classId,
   weaponId,
   armorId,
   startLevel,
@@ -155,11 +164,14 @@ export default function GameCanvas({
     materials: startMaterials,
     weaponId,
     armorId,
+    classId,
     attackCooldownLeft: 0,
     attackAnim: 0,
     hitFlash: 0,
     alive: true,
     blocking: false,
+    ultimateCooldownLeft: 0,
+    ultimateShieldUntil: 0,
   })
 
   const remotePlayersRef = useRef<Map<string, RemotePlayer>>(new Map())
@@ -248,7 +260,10 @@ export default function GameCanvas({
     if (!lp.alive) return
     const armor = getArmor(lp.armorId)
     let dmg = amount * (1 - damageReductionFromDefense(armor.defense))
-    if (lp.blocking) {
+    if (performance.now() < lp.ultimateShieldUntil) {
+      dmg *= ULTIMATE_SHIELD_DAMAGE_MULT
+      floatingRef.current.push({ pos: { ...lp.pos }, text: 'Bastión', color: '#4C6B8A', life: 0.6, vy: -30 })
+    } else if (lp.blocking) {
       dmg *= BLOCK_DAMAGE_MULT
       floatingRef.current.push({ pos: { ...lp.pos }, text: 'Bloqueado', color: '#4C6B8A', life: 0.6, vy: -30 })
     }
@@ -258,6 +273,37 @@ export default function GameCanvas({
       lp.hp = 0
       lp.alive = false
     }
+  }
+
+  function castUltimate() {
+    const lp = localRef.current
+    if (!lp.alive || lp.ultimateCooldownLeft > 0) return
+    const cls = getClass(lp.classId)
+    lp.ultimateCooldownLeft = cls.cooldown
+    const weapon = getWeapon(lp.weaponId)
+
+    if (lp.classId === 'guerrero') {
+      enemiesRef.current.forEach((e, uid) => {
+        if (dist(lp.pos, e.pos) <= ULTIMATE_GUERRERO_RADIUS) {
+          const dmg = weapon.damage * 1.7 * (1 + lp.level * 0.025)
+          if (isHostRef.current) applyHitToEnemy(uid, dmg, lp.id, lp.pos)
+          else room?.sendHitRequest({ enemyUid: uid, damage: dmg, attackerId: lp.id, isCrit: false })
+        }
+      })
+    } else if (lp.classId === 'cazador') {
+      enemiesRef.current.forEach((e, uid) => {
+        if (dist(lp.pos, e.pos) <= ULTIMATE_CAZADOR_RADIUS) {
+          const dmg = weapon.damage * 1.1 * (1 + lp.level * 0.025)
+          if (isHostRef.current) applyHitToEnemy(uid, dmg, lp.id, lp.pos)
+          else room?.sendHitRequest({ enemyUid: uid, damage: dmg, attackerId: lp.id, isCrit: false })
+        }
+      })
+    } else if (lp.classId === 'guardian') {
+      lp.ultimateShieldUntil = performance.now() + ULTIMATE_SHIELD_DURATION * 1000
+      lp.hp = Math.min(lp.maxHp, lp.hp + lp.maxHp * 0.3)
+    }
+
+    floatingRef.current.push({ pos: { ...lp.pos }, text: `¡${cls.ultimateName}!`, color: cls.color, life: 1.3, vy: -24 })
   }
 
   function tryLocalAttack(now: number) {
@@ -302,6 +348,7 @@ export default function GameCanvas({
       keysRef.current[e.key.toLowerCase()] = true
       if (e.key === ' ') attackHeldRef.current = true
       if (e.key === 'Shift') blockHeldRef.current = true
+      if (e.key.toLowerCase() === 'e') castUltimate()
     }
     function onKeyUp(e: KeyboardEvent) {
       keysRef.current[e.key.toLowerCase()] = false
@@ -477,6 +524,7 @@ export default function GameCanvas({
       const lp = localRef.current
       if (!lp.alive) return
       lp.blocking = blockHeldRef.current
+      if (lp.ultimateCooldownLeft > 0) lp.ultimateCooldownLeft = Math.max(0, lp.ultimateCooldownLeft - dt)
       let mv = { x: 0, y: 0 }
       if (keysRef.current['w'] || keysRef.current['arrowup']) mv.y -= 1
       if (keysRef.current['s'] || keysRef.current['arrowdown']) mv.y += 1
@@ -678,6 +726,18 @@ export default function GameCanvas({
         ctx.arc(lp.pos.x, lp.pos.y, 26, 0, Math.PI * 2)
         ctx.strokeStyle = 'rgba(193, 80, 46, 0.8)'
         ctx.lineWidth = 3
+        ctx.stroke()
+      }
+      if (performance.now() < lp.ultimateShieldUntil) {
+        ctx.beginPath()
+        ctx.arc(lp.pos.x, lp.pos.y, 30, 0, Math.PI * 2)
+        ctx.strokeStyle = 'rgba(76, 107, 138, 0.75)'
+        ctx.lineWidth = 4
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.arc(lp.pos.x, lp.pos.y, 34, 0, Math.PI * 2)
+        ctx.strokeStyle = 'rgba(127, 209, 174, 0.35)'
+        ctx.lineWidth = 2
         ctx.stroke()
       }
 
@@ -1017,6 +1077,9 @@ export default function GameCanvas({
         baseMaxHp: BASE_MAX_HP,
         alive: lp.alive,
         playersOnline: remotePlayersRef.current.size + 1,
+        ultimateName: getClass(lp.classId).ultimateName,
+        ultimateCooldownLeft: lp.ultimateCooldownLeft,
+        ultimateCooldownMax: getClass(lp.classId).cooldown,
       })
     }, 150)
 
@@ -1129,6 +1192,9 @@ export default function GameCanvas({
         onBlockEnd={() => {
           blockHeldRef.current = false
         }}
+        onUltimate={castUltimate}
+        ultimateCooldownLeft={hud?.ultimateCooldownLeft ?? 0}
+        ultimateCooldownMax={hud?.ultimateCooldownMax ?? 1}
       />
     </div>
   )

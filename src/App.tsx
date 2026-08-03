@@ -14,13 +14,13 @@ function loadSave() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as { name: string; color: string } & Progress
+    return JSON.parse(raw) as { name: string; color: string; classId?: string } & Progress
   } catch {
     return null
   }
 }
 
-function persistSave(data: { name: string; color: string } & Progress) {
+function persistSave(data: { name: string; color: string; classId: string } & Progress) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   } catch {
@@ -45,6 +45,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('menu')
   const [name, setName] = useState(saved?.name ?? '')
   const [color, setColor] = useState(saved?.color ?? '#7FD1AE')
+  const [classId, setClassId] = useState(saved?.classId ?? 'guerrero')
   const [progress, setProgress] = useState<Progress>(
     saved
       ? { level: saved.level, xp: saved.xp, materials: saved.materials, weaponId: saved.weaponId, armorId: saved.armorId }
@@ -54,19 +55,21 @@ export default function App() {
   const [mission, setMission] = useState<MissionDef | null>(null)
 
   useEffect(() => {
-    persistSave({ name, color, ...progress })
-  }, [name, color, progress])
+    persistSave({ name, color, classId, ...progress })
+  }, [name, color, classId, progress])
 
-  function handleSolo(n: string, c: string) {
+  function handleSolo(n: string, c: string, cls: string) {
     setName(n)
     setColor(c)
+    setClassId(cls)
     setRoom(null)
     setScreen('camp')
   }
 
-  function handleMultiplayer(n: string, c: string) {
+  function handleMultiplayer(n: string, c: string, cls: string) {
     setName(n)
     setColor(c)
+    setClassId(cls)
     setScreen('lobby')
   }
 
@@ -92,7 +95,13 @@ export default function App() {
   return (
     <>
       {screen === 'menu' && (
-        <MainMenu initialName={name} initialColor={color} onSolo={handleSolo} onMultiplayer={handleMultiplayer} />
+        <MainMenu
+          initialName={name}
+          initialColor={color}
+          initialClassId={classId}
+          onSolo={handleSolo}
+          onMultiplayer={handleMultiplayer}
+        />
       )}
 
       {screen === 'lobby' && (
@@ -126,6 +135,7 @@ export default function App() {
           mission={mission}
           localName={name}
           localColor={color}
+          classId={classId}
           weaponId={progress.weaponId}
           armorId={progress.armorId}
           startLevel={progress.level}

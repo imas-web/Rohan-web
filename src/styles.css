@@ -162,6 +162,41 @@ input {
   box-shadow: 0 0 0 3px rgba(232, 223, 200, 0.15);
 }
 
+.class-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.class-card {
+  flex: 1 1 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(232, 223, 200, 0.25);
+  background: rgba(0, 0, 0, 0.25);
+  text-align: left;
+}
+
+.class-card.selected {
+  background: rgba(232, 223, 200, 0.1);
+  box-shadow: 0 0 0 2px rgba(232, 223, 200, 0.15);
+}
+
+.class-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.class-ulti {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--parchment-dim);
+}
+
 .menu-actions {
   display: flex;
   flex-direction: column;
@@ -632,6 +667,32 @@ canvas {
 
 .block-btn:active {
   background: radial-gradient(circle at 35% 30%, #6E93B8, var(--steel));
+}
+
+.ultimate-btn {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 2px solid rgba(232, 223, 200, 0.5);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  pointer-events: auto;
+  align-self: flex-end;
+  background: rgba(60, 55, 40, 0.7);
+}
+
+.ultimate-btn.ready {
+  background: radial-gradient(circle at 35% 30%, var(--gold), #8A6F1C);
+  box-shadow: 0 8px 22px rgba(201, 162, 39, 0.55);
+}
+
+.ultimate-btn:not(.ready) {
+  background:
+    conic-gradient(rgba(201, 162, 39, 0.5) var(--cd-pct, 100%), rgba(60, 55, 40, 0.85) 0),
+    rgba(60, 55, 40, 0.85);
+  color: var(--parchment-dim);
 }
 
 /* ---------- Pantalla de resultado ---------- */

@@ -19,6 +19,17 @@ export interface ArmorDef {
   speedMod: number // multiplicador de velocidad, 1 = normal
 }
 
+export type ClassId = 'guerrero' | 'guardian' | 'cazador'
+
+export interface ClassDef {
+  id: ClassId
+  name: string
+  ultimateName: string
+  description: string
+  cooldown: number // segundos
+  color: string
+}
+
 export interface EnemyDef {
   id: string
   name: string

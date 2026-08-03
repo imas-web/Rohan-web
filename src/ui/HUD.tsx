@@ -17,6 +17,9 @@ export interface HudState {
   baseMaxHp: number
   alive: boolean
   playersOnline: number
+  ultimateName: string
+  ultimateCooldownLeft: number
+  ultimateCooldownMax: number
 }
 
 function formatTime(s: number) {
@@ -78,7 +81,8 @@ export default function HUD({ state, missionTitle }: { state: HudState; missionT
       )}
 
       <div className="hud-controls-hint">
-        Mantené <strong>Shift</strong> (o el botón DEFENDER) para bloquear golpes — reducís el daño pero te movés más lento y no podés atacar.
+        Mantené <strong>Shift</strong> (DEFENDER) para bloquear golpes. Apretá <strong>E</strong> (ULTI) para usar {state.ultimateName}
+        {state.ultimateCooldownLeft > 0 ? ` — lista en ${Math.ceil(state.ultimateCooldownLeft)}s` : ' — ¡lista!'}.
       </div>
     </div>
   )

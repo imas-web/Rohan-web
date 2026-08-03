@@ -7,11 +7,24 @@ interface Props {
   onAttackEnd: () => void
   onBlockStart: () => void
   onBlockEnd: () => void
+  onUltimate: () => void
+  ultimateCooldownLeft: number
+  ultimateCooldownMax: number
 }
 
 const STICK_RADIUS = 52
 
-export default function TouchControls({ onMove, onAttackStart, onAttackEnd, onBlockStart, onBlockEnd }: Props) {
+export default function TouchControls({
+  onMove,
+  onAttackStart,
+  onAttackEnd,
+  onBlockStart,
+  onBlockEnd,
+  onUltimate,
+  ultimateCooldownLeft,
+  ultimateCooldownMax,
+}: Props) {
+  const ultimateReady = ultimateCooldownLeft <= 0
   const baseRef = useRef<HTMLDivElement | null>(null)
   const [knob, setKnob] = useState({ x: 0, y: 0 })
   const activeTouch = useRef<number | null>(null)
@@ -67,6 +80,18 @@ export default function TouchControls({ onMove, onAttackStart, onAttackEnd, onBl
         <div className="joystick-knob" style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
       </div>
       <div className="action-buttons">
+        <button
+          className={`ultimate-btn ${ultimateReady ? 'ready' : ''}`}
+          disabled={!ultimateReady}
+          style={ultimateReady ? undefined : { ['--cd-pct' as string]: `${(ultimateCooldownLeft / ultimateCooldownMax) * 100}%` }}
+          onTouchStart={(e) => {
+            e.preventDefault()
+            onUltimate()
+          }}
+          onClick={onUltimate}
+        >
+          {ultimateReady ? 'ULTI' : Math.ceil(ultimateCooldownLeft)}
+        </button>
         <button
           className="block-btn"
           onTouchStart={(e) => {

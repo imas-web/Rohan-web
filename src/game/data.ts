@@ -1,4 +1,4 @@
-import type { ArmorDef, EnemyDef, MissionDef, WeaponDef } from './types'
+import type { ArmorDef, ClassDef, EnemyDef, MissionDef, WeaponDef } from './types'
 
 export const WEAPONS: WeaponDef[] = [
   { id: 'daga', name: 'Daga oxidada', rarity: 'comun', damage: 8, range: 46, attackSpeed: 2.6, critChance: 0.05 },
@@ -24,6 +24,37 @@ export const ENEMIES: Record<string, EnemyDef> = {
   arquero_uruk: { id: 'arquero_uruk', name: 'Arquero Uruk-hai', hp: 30, damage: 8, speed: 55, radius: 14, xpReward: 16, color: '#3E4A6B', ranged: true, attackRange: 260, attackCooldown: 1.6 },
   berserker_uruk: { id: 'berserker_uruk', name: 'Berserker Uruk-hai', hp: 90, damage: 18, speed: 70, radius: 20, xpReward: 30, color: '#8B3A2B', attackRange: 42, attackCooldown: 1.3 },
   jefe_ugluk: { id: 'jefe_ugluk', name: 'Ugluk, capitán Uruk-hai', hp: 900, damage: 26, speed: 58, radius: 34, xpReward: 400, color: '#C1502E', attackRange: 60, attackCooldown: 0.9, isBoss: true },
+}
+
+export const CLASSES: ClassDef[] = [
+  {
+    id: 'guerrero',
+    name: 'Guerrero',
+    ultimateName: 'Grito de Guerra',
+    description: 'Golpe en área alrededor tuyo: buena para cuando te rodean.',
+    cooldown: 20,
+    color: '#C1502E',
+  },
+  {
+    id: 'guardian',
+    name: 'Guardián',
+    ultimateName: 'Bastión de Rohan',
+    description: 'Te cura y te vuelve casi inmune al daño por unos segundos.',
+    cooldown: 26,
+    color: '#4C6B8A',
+  },
+  {
+    id: 'cazador',
+    name: 'Cazador',
+    ultimateName: 'Lluvia de Flechas',
+    description: 'Daño a distancia en un área amplia, ideal contra grupos.',
+    cooldown: 22,
+    color: '#7FD1AE',
+  },
+]
+
+export function getClass(id: string): ClassDef {
+  return CLASSES.find((c) => c.id === id) ?? CLASSES[0]
 }
 
 export const MISSIONS: MissionDef[] = [

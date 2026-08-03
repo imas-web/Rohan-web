@@ -1,22 +1,27 @@
 import { useState } from 'react'
+import { CLASSES } from '../game/data'
 
 const COLORS = ['#7FD1AE', '#C1502E', '#4C6B8A', '#C9A227', '#8A4C9B', '#D97F5A']
 
 export default function MainMenu({
   initialName,
   initialColor,
+  initialClassId,
   onSolo,
   onMultiplayer,
 }: {
   initialName: string
   initialColor: string
-  onSolo: (name: string, color: string) => void
-  onMultiplayer: (name: string, color: string) => void
+  initialClassId: string
+  onSolo: (name: string, color: string, classId: string) => void
+  onMultiplayer: (name: string, color: string, classId: string) => void
 }) {
   const [name, setName] = useState(initialName || '')
   const [color, setColor] = useState(initialColor || COLORS[0])
+  const [classId, setClassId] = useState(initialClassId || CLASSES[0].id)
 
   const canPlay = name.trim().length >= 2
+  const selectedClass = CLASSES.find((c) => c.id === classId) ?? CLASSES[0]
 
   return (
     <div className="screen menu-screen">
@@ -50,11 +55,27 @@ export default function MainMenu({
           ))}
         </div>
 
+        <label className="field-label">Tu clase (define tu habilidad definitiva)</label>
+        <div className="class-row">
+          {CLASSES.map((c) => (
+            <button
+              key={c.id}
+              className={`class-card ${c.id === classId ? 'selected' : ''}`}
+              style={{ borderColor: c.color }}
+              onClick={() => setClassId(c.id)}
+            >
+              <span className="class-name" style={{ color: c.color }}>{c.name}</span>
+              <span className="class-ulti">{c.ultimateName}</span>
+            </button>
+          ))}
+        </div>
+        <p className="hint">{selectedClass.description}</p>
+
         <div className="menu-actions">
-          <button className="btn-primary" disabled={!canPlay} onClick={() => onSolo(name.trim(), color)}>
+          <button className="btn-primary" disabled={!canPlay} onClick={() => onSolo(name.trim(), color, classId)}>
             Jugar solo
           </button>
-          <button className="btn-secondary" disabled={!canPlay} onClick={() => onMultiplayer(name.trim(), color)}>
+          <button className="btn-secondary" disabled={!canPlay} onClick={() => onMultiplayer(name.trim(), color, classId)}>
             Jugar en grupo (hasta 4)
           </button>
         </div>
