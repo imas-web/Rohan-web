@@ -146,10 +146,10 @@ export function ultimateCooldownMult(rank: number): number {
 }
 
 export const MISSIONS: MissionDef[] = [
-  { id: 'oleadas_cuerno', title: 'El Cuerno de Helm', description: 'Resistí 6 oleadas de orcos y derrotá a Ugluk al final.', mode: 'oleadas', waveCount: 6 },
-  { id: 'defensa_muro', title: 'El Muro del Abismo', description: 'Defendé el muro durante 4 minutos sin que caiga.', mode: 'defensa', durationSec: 240 },
-  { id: 'mision_exterminio', title: 'Limpieza del Vado', description: 'Eliminá 40 orcos antes de que refuercen sus filas.', mode: 'mision', killTarget: 40 },
   { id: 'paso_montana', title: 'El Paso de la Montaña', description: 'Saltá pozos y plataformas, peleá contra los orcos del camino, y llegá a la bandera del final.', mode: 'plataformas' },
+  { id: 'mision_exterminio', title: 'Limpieza del Vado', description: 'Eliminá 40 orcos antes de que refuercen sus filas.', mode: 'mision', killTarget: 40 },
+  { id: 'defensa_muro', title: 'El Muro del Abismo', description: 'Defendé el muro durante 4 minutos sin que caiga.', mode: 'defensa', durationSec: 240 },
+  { id: 'oleadas_cuerno', title: 'El Cuerno de Helm', description: 'Resistí 6 oleadas de orcos y derrotá a Ugluk al final.', mode: 'oleadas', waveCount: 6 },
 ]
 
 export function xpToNextLevel(level: number): number {

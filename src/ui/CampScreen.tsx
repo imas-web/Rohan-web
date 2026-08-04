@@ -1,17 +1,12 @@
 import { useEffect, useState, type MutableRefObject } from 'react'
 import {
   MISSIONS,
-  RARITY_COLOR,
   ULTIMATE_MAX_RANK,
   ULTIMATE_RANK_COST,
   abilitiesForClass,
-  armorIdForLevel,
   getAbility,
-  getArmor,
   getClass,
-  getWeapon,
   skillPointsForLevel,
-  weaponIdForClassLevel,
   xpToNextLevel,
 } from '../game/data'
 import type { MissionDef } from '../game/types'
@@ -48,8 +43,6 @@ export default function CampScreen({
   onBack: () => void
 }) {
   const cls = getClass(classId)
-  const weapon = getWeapon(weaponIdForClassLevel(classId, progress.level))
-  const armor = getArmor(armorIdForLevel(progress.level))
   const activeAbility = getAbility(progress.activeAbilityId)
   const totalSkillPoints = skillPointsForLevel(progress.level)
   const nextRankCost = ULTIMATE_RANK_COST[progress.ultimateRank]
@@ -105,23 +98,6 @@ export default function CampScreen({
           {!isHost && <p className="hint">Esperando a que el líder de la sala elija la misión...</p>}
         </div>
       )}
-
-      <section className="camp-section">
-        <h2>Tu equipo — {cls.name}</h2>
-        <p className="hint">El arma y la armadura de tu clase mejoran solas al subir de nivel.</p>
-        <div className="item-grid">
-          <div className="item-card equipped" style={{ borderColor: RARITY_COLOR[weapon.rarity] }}>
-            <span className="item-name">{weapon.name}</span>
-            <span className="item-rarity" style={{ color: RARITY_COLOR[weapon.rarity] }}>{weapon.rarity}</span>
-            <span className="item-stats">Daño {weapon.damage} · Vel. {weapon.attackSpeed}/s · Crít {Math.round(weapon.critChance * 100)}%</span>
-          </div>
-          <div className="item-card equipped" style={{ borderColor: RARITY_COLOR[armor.rarity] }}>
-            <span className="item-name">{armor.name}</span>
-            <span className="item-rarity" style={{ color: RARITY_COLOR[armor.rarity] }}>{armor.rarity}</span>
-            <span className="item-stats">Def. {armor.defense} · +{armor.hpBonus} HP</span>
-          </div>
-        </div>
-      </section>
 
       <section className="camp-section">
         <h2>Habilidades — {cls.name}</h2>
