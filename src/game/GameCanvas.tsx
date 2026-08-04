@@ -16,6 +16,7 @@ import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supaba
 import HUD, { type HudState } from '../ui/HUD'
 import TouchControls from '../ui/TouchControls'
 import { drawBar, drawHumanoid } from './render'
+import { drawSprite, preloadSprites, type SpriteKey } from './sprites'
 
 interface LocalPlayer {
   id: string
@@ -425,6 +426,8 @@ export default function GameCanvas({
     let lastNetworkSend = 0
     let lastHostBroadcast = 0
 
+    preloadSprites()
+
     function resize() {
       canvas.width = window.innerWidth
       canvas.height = window.innerHeight
@@ -804,11 +807,14 @@ export default function GameCanvas({
           ctx.stroke()
         }
 
-        drawHumanoid(ctx, e.pos, facing, r, def.color, '#20241A', def.isBoss ? '#C9A227' : 'rgba(0,0,0,0.45)', def.isBoss ? 3 : 1.5, e.hitFlash > 0, {
-          tusks: true,
-          crown: def.isBoss,
-          weaponShape: def.ranged ? 'bow' : undefined,
-        })
+        const enemySpriteOk = drawSprite(ctx, e.uid, e.defId as SpriteKey, e.pos, facing, r * 3.4, e.hitFlash > 0)
+        if (!enemySpriteOk) {
+          drawHumanoid(ctx, e.pos, facing, r, def.color, '#20241A', def.isBoss ? '#C9A227' : 'rgba(0,0,0,0.45)', def.isBoss ? 3 : 1.5, e.hitFlash > 0, {
+            tusks: true,
+            crown: def.isBoss,
+            weaponShape: def.ranged ? 'bow' : undefined,
+          })
+        }
         drawBar(ctx, e.pos.x - r, e.pos.y - r - 12, r * 2, 5, e.hp / e.maxHp, def.isBoss ? '#C9A227' : '#8B3A2B')
         if (def.isBoss) {
           ctx.fillStyle = '#C9A227'
@@ -827,12 +833,12 @@ export default function GameCanvas({
           const to = { x: rp.pos.x + rp.facing.x * RANGED_ATTACK_RANGE, y: rp.pos.y + rp.facing.y * RANGED_ATTACK_RANGE }
           arrowsRef.current.push({ from: { ...rp.pos }, to, t: 0, kind: rpCls.weaponShape === 'staff' ? 'bolt' : 'arrow' })
         }
-        drawPlayer(ctx, rp.pos, rp.facing, rp.color, rp.name, rp.hp, rp.maxHp, false, swingT, rp.blocking, rp.weaponId, rp.classId)
+        drawPlayer(ctx, rp.pos, rp.facing, rp.color, rp.name, rp.hp, rp.maxHp, false, swingT, rp.blocking, rp.weaponId, rp.classId, rp.id)
       })
 
       // jugador local
       const localSwingT = lp.attackAnim > 0 ? 1 - lp.attackAnim / ATTACK_SWING_DURATION : 0
-      drawPlayer(ctx, lp.pos, lp.facing, lp.color, lp.name + ' (vos)', lp.hp, lp.maxHp, true, localSwingT, lp.blocking, lp.weaponId, lp.classId)
+      drawPlayer(ctx, lp.pos, lp.facing, lp.color, lp.name + ' (vos)', lp.hp, lp.maxHp, true, localSwingT, lp.blocking, lp.weaponId, lp.classId, lp.id)
       if (lp.hitFlash > 0) {
         ctx.beginPath()
         ctx.arc(lp.pos.x, lp.pos.y, 26, 0, Math.PI * 2)
@@ -1070,7 +1076,8 @@ export default function GameCanvas({
       swingT: number,
       blocking: boolean,
       weaponId: string,
-      classId: string
+      classId: string,
+      trackId: string
     ) {
       const cls = getClass(classId)
       const radius = 18 * cls.bodyScale
@@ -1084,13 +1091,23 @@ export default function GameCanvas({
         c.globalAlpha = 1
       }
       const weapon = getWeapon(weaponId)
-      drawHumanoid(c, pos, facing, radius, color, '#E8DFC8', isLocal ? '#E8DFC8' : 'rgba(232,223,200,0.6)', isLocal ? 3 : 2, false, {
-        shield: blocking,
-        swingT,
-        weaponShape: cls.weaponShape,
-        legendary: weapon.rarity === 'legendario',
-        beard: cls.id === 'enano',
-      })
+      const spriteOk = drawSprite(c, trackId, classId as SpriteKey, pos, facing, radius * 3.4, false)
+      if (!spriteOk) {
+        drawHumanoid(c, pos, facing, radius, color, '#E8DFC8', isLocal ? '#E8DFC8' : 'rgba(232,223,200,0.6)', isLocal ? 3 : 2, false, {
+          shield: blocking,
+          swingT,
+          weaponShape: cls.weaponShape,
+          legendary: weapon.rarity === 'legendario',
+          beard: cls.id === 'enano',
+        })
+      }
+      if (blocking) {
+        c.beginPath()
+        c.arc(pos.x, pos.y, radius * 1.3, -0.9, 0.9)
+        c.strokeStyle = 'rgba(76,107,138,0.9)'
+        c.lineWidth = 4
+        c.stroke()
+      }
       drawBar(c, pos.x - 22, pos.y - radius * 1.9, 44, 6, Math.max(0, hp) / maxHp, '#7FD1AE')
       c.fillStyle = blocking ? '#4C6B8A' : '#E8DFC8'
       c.font = '11px Inter, sans-serif'

@@ -195,6 +195,7 @@ export default function App() {
           mission={mission}
           localName={name}
           localColor={color}
+          classId={classId}
           weaponId={weaponId}
           armorId={armorId}
           startLevel={progress.level}

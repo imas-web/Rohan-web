@@ -4,6 +4,7 @@ import { ENEMIES, enemyCountMultiplierForParty, getArmor, getWeapon, rewardMulti
 import { PLATFORMER_LEVEL } from './platformerLevel'
 import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supabase/multiplayer'
 import { drawBar, drawHumanoid } from './render'
+import { drawSprite, preloadSprites, type SpriteKey } from './sprites'
 import PlatformerControls from '../ui/PlatformerControls'
 
 const GRAVITY = 1900
@@ -71,6 +72,7 @@ export interface PlatformerCanvasProps {
   mission: MissionDef
   localName: string
   localColor: string
+  classId: string
   weaponId: string
   armorId: string
   startLevel: number
@@ -92,6 +94,7 @@ export default function PlatformerCanvas({
   mission,
   localName,
   localColor,
+  classId,
   weaponId,
   armorId,
   startLevel,
@@ -267,6 +270,8 @@ export default function PlatformerCanvas({
     let lastNetworkSend = 0
     let lastHostBroadcast = 0
 
+    preloadSprites()
+
     function resize() {
       canvas.width = window.innerWidth
       canvas.height = window.innerHeight
@@ -431,7 +436,7 @@ export default function PlatformerCanvas({
           blocking: false,
           weaponId: lp.weaponId,
           armorId: lp.armorId,
-          classId: 'guerrero',
+          classId,
         })
       }
 
@@ -551,7 +556,10 @@ export default function PlatformerCanvas({
         const def = ENEMIES[e.defId]
         const bounds = patrolBoundsRef.current.get(e.uid)
         const facing = { x: bounds ? bounds.dir : -1, y: 0 }
-        drawHumanoid(ctx, e.pos, facing, def.radius, def.color, '#20241A', 'rgba(0,0,0,0.45)', 1.5, e.hitFlash > 0, { horns: true })
+        const enemySpriteOk = drawSprite(ctx, e.uid, e.defId as SpriteKey, e.pos, facing, def.radius * 3.4, e.hitFlash > 0)
+        if (!enemySpriteOk) {
+          drawHumanoid(ctx, e.pos, facing, def.radius, def.color, '#20241A', 'rgba(0,0,0,0.45)', 1.5, e.hitFlash > 0, { horns: true })
+        }
         drawBar(ctx, e.pos.x - def.radius, e.pos.y - def.radius * 2 - 30, def.radius * 2, 5, e.hp / e.maxHp, '#8B3A2B')
       })
 
@@ -559,11 +567,14 @@ export default function PlatformerCanvas({
       remotePlayersRef.current.forEach((rp) => {
         const swingT = getRemoteSwingT(rp.id, rp.attacking, dt)
         const weapon = getWeapon(rp.weaponId)
-        drawHumanoid(ctx, rp.pos, { x: rp.facing.x, y: 0 }, 18, rp.color, '#E8DFC8', 'rgba(232,223,200,0.6)', 2, false, {
-          swingT,
-          weaponShape: weapon.shape,
-          legendary: weapon.rarity === 'legendario',
-        })
+        const rpSpriteOk = drawSprite(ctx, rp.id, rp.classId as SpriteKey, rp.pos, { x: rp.facing.x, y: 0 }, 18 * 3.4, false)
+        if (!rpSpriteOk) {
+          drawHumanoid(ctx, rp.pos, { x: rp.facing.x, y: 0 }, 18, rp.color, '#E8DFC8', 'rgba(232,223,200,0.6)', 2, false, {
+            swingT,
+            weaponShape: weapon.shape,
+            legendary: weapon.rarity === 'legendario',
+          })
+        }
         drawBar(ctx, rp.pos.x - 22, rp.pos.y - 66, 44, 6, Math.max(0, rp.hp) / rp.maxHp, '#7FD1AE')
         ctx.fillStyle = '#E8DFC8'
         ctx.font = '11px Inter, sans-serif'
@@ -577,11 +588,14 @@ export default function PlatformerCanvas({
       const weapon = getWeapon(lp.weaponId)
       const flashLocal = lp.invulnLeft > 0 && Math.floor(lp.invulnLeft * 10) % 2 === 0
       ctx.globalAlpha = lp.invulnLeft > 0 ? 0.55 : 1
-      drawHumanoid(ctx, { x: lp.x, y: lp.y }, { x: lp.facing, y: 0 }, 18, lp.color, '#E8DFC8', '#E8DFC8', 3, flashLocal, {
-        swingT: localSwingT,
-        weaponShape: weapon.shape,
-        legendary: weapon.rarity === 'legendario',
-      })
+      const localSpriteOk = drawSprite(ctx, lp.id, classId as SpriteKey, { x: lp.x, y: lp.y }, { x: lp.facing, y: 0 }, 18 * 3.4, flashLocal)
+      if (!localSpriteOk) {
+        drawHumanoid(ctx, { x: lp.x, y: lp.y }, { x: lp.facing, y: 0 }, 18, lp.color, '#E8DFC8', '#E8DFC8', 3, flashLocal, {
+          swingT: localSwingT,
+          weaponShape: weapon.shape,
+          legendary: weapon.rarity === 'legendario',
+        })
+      }
       ctx.globalAlpha = 1
       drawBar(ctx, lp.x - 22, lp.y - 66, 44, 6, Math.max(0, lp.hp) / lp.maxHp, '#7FD1AE')
       ctx.fillStyle = '#E8DFC8'
