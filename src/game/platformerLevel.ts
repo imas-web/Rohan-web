@@ -21,6 +21,16 @@ export interface ChestSpawn {
   gold: number
 }
 
+// a diferencia de un Alcove (hueco opcional para un cofre), un Blockade
+// corta el carril base por completo: un derrumbe de rocas que obliga a
+// todos los jugadores a desviarse por el hueco lateral para poder pasar.
+export interface Blockade {
+  x: number
+  halfWidth: number
+  side: 'up' | 'down'
+  depth: number
+}
+
 export interface PlatformerLevel {
   width: number
   laneMinY: number
@@ -28,6 +38,7 @@ export interface PlatformerLevel {
   checkpoints: number[]
   enemies: PlatformEnemySpawn[]
   alcoves: Alcove[]
+  blockades: Blockade[]
   chests: ChestSpawn[]
   goal: Vec2
   startPos: Vec2
@@ -79,6 +90,12 @@ export const PLATFORMER_LEVEL: PlatformerLevel = {
     { x: 2550, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
     { x: 3100, halfWidth: ALCOVE_HALF_WIDTH, side: 'down', depth: ALCOVE_DEPTH },
     { x: 3650, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
+  ],
+  // derrumbes que cortan el carril principal: para pasar hay que meterse en
+  // el hueco lateral (más difícil todavía si hay un orco cerca vigilándolo)
+  blockades: [
+    { x: 1300, halfWidth: 50, side: 'down', depth: 110 },
+    { x: 3250, halfWidth: 50, side: 'up', depth: 110 },
   ],
   chests: [
     { x: 350, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 20 },

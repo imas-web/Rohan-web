@@ -96,6 +96,72 @@ const CASTLE_WALL_THICK = 34
 const CASTLE_R_IN = CASTLE_R_OUT - CASTLE_WALL_THICK
 const CASTLE_GATE_HALF = 70
 
+// Cada misión de patio reutiliza la misma geometría de castillo, pero con una
+// paleta y decorados distintos para que se sienta un lugar diferente: el
+// vado (río), el muro bajo asedio (ámbar/rubble) y el Cuerno de Helm
+// (mazmorra fría con antorchas).
+interface SceneTheme {
+  bg: string
+  groundIn: string
+  groundOut: string
+  gridColor: string
+  wallColor: string
+  crenelColor: string
+  wallEdgeColor: string
+  towerColor: string
+  towerCoreColor: string
+  floorColor: string
+  floorGridColor: string
+  accentColor: string
+}
+
+const SCENE_THEMES: Record<string, SceneTheme> = {
+  mision_exterminio: {
+    bg: '#0F1A17',
+    groundIn: '#1E332A',
+    groundOut: '#0B1512',
+    gridColor: 'rgba(180, 223, 200, 0.06)',
+    wallColor: '#4A5A46',
+    crenelColor: '#3C4A38',
+    wallEdgeColor: 'rgba(0,0,0,0.4)',
+    towerColor: '#57604F',
+    towerCoreColor: '#333F2E',
+    floorColor: '#202D22',
+    floorGridColor: 'rgba(210, 232, 210, 0.05)',
+    accentColor: '#5FA98A',
+  },
+  defensa_muro: {
+    bg: '#1A130D',
+    groundIn: '#2E1D14',
+    groundOut: '#130B07',
+    gridColor: 'rgba(217, 103, 63, 0.07)',
+    wallColor: '#54402F',
+    crenelColor: '#40301F',
+    wallEdgeColor: 'rgba(0,0,0,0.45)',
+    towerColor: '#5E4A36',
+    towerCoreColor: '#3A2A1A',
+    floorColor: '#2B1F16',
+    floorGridColor: 'rgba(232, 180, 140, 0.05)',
+    accentColor: '#C1502E',
+  },
+  oleadas_cuerno: {
+    bg: '#12111A',
+    groundIn: '#221F30',
+    groundOut: '#0D0C13',
+    gridColor: 'rgba(160, 140, 200, 0.06)',
+    wallColor: '#413E54',
+    crenelColor: '#312E42',
+    wallEdgeColor: 'rgba(0,0,0,0.5)',
+    towerColor: '#4A465E',
+    towerCoreColor: '#2A2738',
+    floorColor: '#221F2E',
+    floorGridColor: 'rgba(200, 180, 232, 0.05)',
+    accentColor: '#8A4C9B',
+  },
+}
+
+const DEFAULT_SCENE_THEME = SCENE_THEMES.mision_exterminio
+
 // Colisión simple contra el muro: bloquea el movimiento salvo en las 4 puertas,
 // lo que hace que jugadores y enemigos "resbalen" por el muro hasta encontrar una.
 function isBlockedByWall(pos: Vec2): boolean {
@@ -443,6 +509,7 @@ export default function GameCanvas({
     let lastTs = performance.now()
     let lastNetworkSend = 0
     let lastHostBroadcast = 0
+    const theme = SCENE_THEMES[mission.id] ?? DEFAULT_SCENE_THEME
 
     preloadSprites()
 
@@ -563,9 +630,9 @@ export default function GameCanvas({
       } else if (mission.mode === 'defensa') {
         ms.timeLeft -= dt
         ms.spawnTimer -= dt
-        const intensity = 1 + (mission.durationSec! - ms.timeLeft) / 70
+        const intensity = 1 + (mission.durationSec! - ms.timeLeft) / 60
         if (ms.spawnTimer <= 0) {
-          ms.spawnTimer = Math.max(0.9, 2.6 / intensity) / countMult
+          ms.spawnTimer = Math.max(0.75, 2.3 / intensity) / countMult
           spawnEnemy(pickEnemyDefForWave(Math.floor(intensity), true), randomEdgeSpawnPos())
         }
         if (ms.baseHp <= 0) {
@@ -577,8 +644,8 @@ export default function GameCanvas({
         }
       } else if (mission.mode === 'mision') {
         ms.spawnTimer -= dt
-        if (ms.spawnTimer <= 0 && enemiesRef.current.size < 8 * countMult) {
-          ms.spawnTimer = 1.7 / countMult
+        if (ms.spawnTimer <= 0 && enemiesRef.current.size < 9 * countMult) {
+          ms.spawnTimer = 1.5 / countMult
           spawnEnemy(pickEnemyDefForWave(2, false), randomEdgeSpawnPos())
         }
         if (ms.kills >= Math.round((mission.killTarget ?? 40) * countMult)) {
@@ -806,7 +873,7 @@ export default function GameCanvas({
       const camX = Math.min(WORLD_W - w / 2, Math.max(w / 2, lp.pos.x))
       const camY = Math.min(WORLD_H - h / 2, Math.max(h / 2, lp.pos.y))
 
-      ctx.fillStyle = '#141910'
+      ctx.fillStyle = theme.bg
       ctx.fillRect(0, 0, w, h)
 
       ctx.save()
@@ -814,11 +881,11 @@ export default function GameCanvas({
 
       // Suelo con grilla sutil
       const grad = ctx.createRadialGradient(WORLD_W / 2, WORLD_H / 2, 100, WORLD_W / 2, WORLD_H / 2, WORLD_W * 0.8)
-      grad.addColorStop(0, '#232C1B')
-      grad.addColorStop(1, '#0F130C')
+      grad.addColorStop(0, theme.groundIn)
+      grad.addColorStop(1, theme.groundOut)
       ctx.fillStyle = grad
       ctx.fillRect(0, 0, WORLD_W, WORLD_H)
-      ctx.strokeStyle = 'rgba(233, 223, 200, 0.05)'
+      ctx.strokeStyle = theme.gridColor
       ctx.lineWidth = 1
       for (let x = 0; x <= WORLD_W; x += 80) {
         ctx.beginPath()
@@ -836,6 +903,8 @@ export default function GameCanvas({
       ctx.strokeStyle = 'rgba(193, 80, 46, 0.35)'
       ctx.lineWidth = 6
       ctx.strokeRect(3, 3, WORLD_W - 6, WORLD_H - 6)
+
+      drawSceneDecor()
 
       // castillo: patio amurallado con torres y puertas, siempre presente
       drawCastle()
@@ -1006,7 +1075,7 @@ export default function GameCanvas({
     function drawCrenellations(x: number, y: number, w: number, h: number, orientation: 'h' | 'v', outerSide: -1 | 1) {
       const size = 10
       const gap = 15
-      ctx.fillStyle = '#4A4438'
+      ctx.fillStyle = theme.crenelColor
       if (orientation === 'h') {
         for (let px = x + 4; px < x + w - size; px += gap) {
           ctx.fillRect(px, outerSide < 0 ? y - size : y + h, size, size)
@@ -1022,14 +1091,14 @@ export default function GameCanvas({
       const r = CASTLE_WALL_THICK * 1.5
       ctx.beginPath()
       ctx.arc(cx, cy, r, 0, Math.PI * 2)
-      ctx.fillStyle = '#57503F'
+      ctx.fillStyle = theme.towerColor
       ctx.fill()
       ctx.strokeStyle = 'rgba(0,0,0,0.4)'
       ctx.lineWidth = 2
       ctx.stroke()
       ctx.beginPath()
       ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2)
-      ctx.fillStyle = '#3A3226'
+      ctx.fillStyle = theme.towerCoreColor
       ctx.fill()
       ctx.strokeStyle = '#8A7A5C'
       ctx.lineWidth = 2
@@ -1037,7 +1106,7 @@ export default function GameCanvas({
       ctx.moveTo(cx, cy - r * 0.55)
       ctx.lineTo(cx, cy - r * 1.7)
       ctx.stroke()
-      ctx.fillStyle = '#C9A227'
+      ctx.fillStyle = theme.accentColor
       ctx.beginPath()
       ctx.moveTo(cx, cy - r * 1.7)
       ctx.lineTo(cx + r * 0.9, cy - r * 1.45)
@@ -1055,9 +1124,9 @@ export default function GameCanvas({
       const t = CASTLE_WALL_THICK
 
       // patio empedrado
-      ctx.fillStyle = '#262019'
+      ctx.fillStyle = theme.floorColor
       ctx.fillRect(cx - rIn, cy - rIn, rIn * 2, rIn * 2)
-      ctx.strokeStyle = 'rgba(232, 223, 200, 0.06)'
+      ctx.strokeStyle = theme.floorGridColor
       ctx.lineWidth = 1
       for (let x = -rIn; x <= rIn; x += 40) {
         ctx.beginPath()
@@ -1084,16 +1153,16 @@ export default function GameCanvas({
         { x: cx + rIn, y: cy + gh, w: t, h: rOut - gh, orientation: 'v', outerSide: 1 },
       ]
       segs.forEach((s) => {
-        ctx.fillStyle = '#4A4438'
+        ctx.fillStyle = theme.wallColor
         ctx.fillRect(s.x, s.y, s.w, s.h)
-        ctx.strokeStyle = 'rgba(0,0,0,0.4)'
+        ctx.strokeStyle = theme.wallEdgeColor
         ctx.lineWidth = 2
         ctx.strokeRect(s.x, s.y, s.w, s.h)
         drawCrenellations(s.x, s.y, s.w, s.h, s.orientation, s.outerSide)
       })
 
       // umbrales de las 4 puertas
-      ctx.fillStyle = '#2B2118'
+      ctx.fillStyle = theme.towerCoreColor
       ctx.fillRect(cx - gh, cy - rOut, gh * 2, t)
       ctx.fillRect(cx - gh, cy + rIn, gh * 2, t)
       ctx.fillRect(cx - rOut, cy - gh, t, gh * 2)
@@ -1110,14 +1179,14 @@ export default function GameCanvas({
       const { x, y } = BASE_POS
       ctx.beginPath()
       ctx.arc(x, y, 50, 0, Math.PI * 2)
-      ctx.fillStyle = '#57503F'
+      ctx.fillStyle = theme.towerColor
       ctx.fill()
-      ctx.strokeStyle = '#C9A227'
+      ctx.strokeStyle = theme.accentColor
       ctx.lineWidth = 4
       ctx.stroke()
       ctx.beginPath()
       ctx.arc(x, y, 30, 0, Math.PI * 2)
-      ctx.fillStyle = '#3A3226'
+      ctx.fillStyle = theme.towerCoreColor
       ctx.fill()
       ctx.strokeStyle = '#8A7A5C'
       ctx.lineWidth = 2
@@ -1125,13 +1194,99 @@ export default function GameCanvas({
       ctx.moveTo(x, y - 30)
       ctx.lineTo(x, y - 72)
       ctx.stroke()
-      ctx.fillStyle = '#C9A227'
+      ctx.fillStyle = theme.accentColor
       ctx.beginPath()
       ctx.moveTo(x, y - 72)
       ctx.lineTo(x + 26, y - 62)
       ctx.lineTo(x, y - 52)
       ctx.closePath()
       ctx.fill()
+    }
+
+    function drawSceneDecor() {
+      if (mission.id === 'mision_exterminio') {
+        // el Vado: un río corre a lo largo del borde norte, con juncos
+        const riverY = 90
+        const riverH = 70
+        const grad = ctx.createLinearGradient(0, riverY, 0, riverY + riverH)
+        grad.addColorStop(0, 'rgba(79, 140, 158, 0.55)')
+        grad.addColorStop(1, 'rgba(41, 84, 97, 0.55)')
+        ctx.fillStyle = grad
+        ctx.fillRect(0, riverY, WORLD_W, riverH)
+        ctx.strokeStyle = 'rgba(200, 230, 225, 0.25)'
+        ctx.lineWidth = 2
+        for (let x = 0; x < WORLD_W; x += 60) {
+          const wobble = Math.sin(x * 0.05 + performance.now() / 900) * 6
+          ctx.beginPath()
+          ctx.moveTo(x, riverY + riverH * 0.5 + wobble)
+          ctx.lineTo(x + 34, riverY + riverH * 0.5 - wobble)
+          ctx.stroke()
+        }
+        ctx.fillStyle = '#3C5A3E'
+        for (let x = 20; x < WORLD_W; x += 130) {
+          const jitter = (x * 53) % 40
+          for (let i = 0; i < 3; i++) {
+            ctx.beginPath()
+            ctx.moveTo(x + jitter + i * 5, riverY + riverH + 4)
+            ctx.lineTo(x + jitter + i * 5 - 3, riverY + riverH - 14)
+            ctx.lineTo(x + jitter + i * 5 + 3, riverY + riverH - 14)
+            ctx.closePath()
+            ctx.fill()
+          }
+        }
+      } else if (mission.id === 'defensa_muro') {
+        // El Muro del Abismo bajo asedio: escombros y braseros encendidos
+        ctx.fillStyle = 'rgba(70, 55, 42, 0.6)'
+        for (let i = 0; i < 26; i++) {
+          const rx = (i * 337) % WORLD_W
+          const ry = (i * 611) % WORLD_H
+          if (Math.abs(rx - CASTLE_CX) < CASTLE_R_OUT + 60 && Math.abs(ry - CASTLE_CY) < CASTLE_R_OUT + 60) continue
+          ctx.beginPath()
+          ctx.moveTo(rx, ry)
+          ctx.lineTo(rx + 22, ry + 6)
+          ctx.lineTo(rx + 8, ry + 20)
+          ctx.closePath()
+          ctx.fill()
+        }
+        const flicker = 0.5 + Math.sin(performance.now() / 140) * 0.15
+        for (let i = 0; i < 8; i++) {
+          const fx = (i * 271) % WORLD_W
+          const fy = (i * 419) % WORLD_H
+          if (Math.abs(fx - CASTLE_CX) < CASTLE_R_OUT + 40 && Math.abs(fy - CASTLE_CY) < CASTLE_R_OUT + 40) continue
+          const glow = ctx.createRadialGradient(fx, fy, 2, fx, fy, 46)
+          glow.addColorStop(0, `rgba(217, 103, 63, ${flicker})`)
+          glow.addColorStop(1, 'rgba(217, 103, 63, 0)')
+          ctx.fillStyle = glow
+          ctx.fillRect(fx - 46, fy - 46, 92, 92)
+          ctx.fillStyle = '#2B2118'
+          ctx.fillRect(fx - 4, fy - 6, 8, 14)
+        }
+      } else if (mission.id === 'oleadas_cuerno') {
+        // El Cuerno de Helm: mazmorra fría, antorchas a lo largo del perímetro
+        const flicker = 0.55 + Math.sin(performance.now() / 160) * 0.2
+        const positions: Vec2[] = []
+        for (let x = 60; x < WORLD_W; x += 220) {
+          positions.push({ x, y: 30 })
+          positions.push({ x, y: WORLD_H - 30 })
+        }
+        for (let y = 60; y < WORLD_H; y += 220) {
+          positions.push({ x: 30, y })
+          positions.push({ x: WORLD_W - 30, y })
+        }
+        positions.forEach((p) => {
+          const glow = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, 40)
+          glow.addColorStop(0, `rgba(138, 76, 155, ${flicker})`)
+          glow.addColorStop(1, 'rgba(138, 76, 155, 0)')
+          ctx.fillStyle = glow
+          ctx.fillRect(p.x - 40, p.y - 40, 80, 80)
+          ctx.fillStyle = '#211D2C'
+          ctx.fillRect(p.x - 3, p.y - 12, 6, 20)
+          ctx.fillStyle = '#C9A9E0'
+          ctx.beginPath()
+          ctx.arc(p.x, p.y - 14, 4, 0, Math.PI * 2)
+          ctx.fill()
+        })
+      }
     }
 
     function getRemoteSwingT(id: string, attacking: boolean, dt: number): number {

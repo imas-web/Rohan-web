@@ -36,12 +36,14 @@ export const ARMORS: ArmorDef[] = [
   { id: 'armadura_helm', name: 'Armadura de Helm Guarnecido', rarity: 'legendario', defense: 19, hpBonus: 80, speedMod: 0.9 },
 ]
 
+// stats subidos ~15-20% respecto a la versión anterior (más vida, más daño,
+// ataques un poco más frecuentes) para que el juego sea más exigente
 export const ENEMIES: Record<string, EnemyDef> = {
-  orco_explorador: { id: 'orco_explorador', name: 'Orco explorador', hp: 20, damage: 5, speed: 72, radius: 14, xpReward: 5, color: '#7A8B5C', attackRange: 34, attackCooldown: 1.0 },
-  orco_guerrero: { id: 'orco_guerrero', name: 'Orco guerrero', hp: 36, damage: 8, speed: 58, radius: 16, xpReward: 9, color: '#5F6E43', attackRange: 36, attackCooldown: 1.1 },
-  arquero_uruk: { id: 'arquero_uruk', name: 'Arquero Uruk-hai', hp: 26, damage: 6, speed: 52, radius: 14, xpReward: 10, color: '#3E4A6B', ranged: true, attackRange: 190, attackCooldown: 1.6 },
-  berserker_uruk: { id: 'berserker_uruk', name: 'Berserker Uruk-hai', hp: 75, damage: 14, speed: 66, radius: 20, xpReward: 18, color: '#8B3A2B', attackRange: 42, attackCooldown: 1.3 },
-  jefe_ugluk: { id: 'jefe_ugluk', name: 'Ugluk, capitán Uruk-hai', hp: 750, damage: 20, speed: 54, radius: 34, xpReward: 260, color: '#C1502E', attackRange: 60, attackCooldown: 0.9, isBoss: true },
+  orco_explorador: { id: 'orco_explorador', name: 'Orco explorador', hp: 23, damage: 6, speed: 76, radius: 14, xpReward: 5, color: '#7A8B5C', attackRange: 34, attackCooldown: 0.9 },
+  orco_guerrero: { id: 'orco_guerrero', name: 'Orco guerrero', hp: 42, damage: 9, speed: 60, radius: 16, xpReward: 9, color: '#5F6E43', attackRange: 36, attackCooldown: 1.0 },
+  arquero_uruk: { id: 'arquero_uruk', name: 'Arquero Uruk-hai', hp: 30, damage: 7, speed: 54, radius: 14, xpReward: 10, color: '#3E4A6B', ranged: true, attackRange: 190, attackCooldown: 1.4 },
+  berserker_uruk: { id: 'berserker_uruk', name: 'Berserker Uruk-hai', hp: 86, damage: 16, speed: 70, radius: 20, xpReward: 18, color: '#8B3A2B', attackRange: 42, attackCooldown: 1.15 },
+  jefe_ugluk: { id: 'jefe_ugluk', name: 'Ugluk, capitán Uruk-hai', hp: 880, damage: 24, speed: 56, radius: 34, xpReward: 260, color: '#C1502E', attackRange: 60, attackCooldown: 0.8, isBoss: true },
 }
 
 export const CLASSES: ClassDef[] = [
@@ -147,9 +149,9 @@ export function ultimateCooldownMult(rank: number): number {
 
 export const MISSIONS: MissionDef[] = [
   { id: 'paso_montana', title: 'El Paso de la Montaña', description: 'Avanzá por el desfiladero y abrite paso a golpes contra los orcos del camino hasta la bandera del final.', mode: 'plataformas' },
-  { id: 'mision_exterminio', title: 'Limpieza del Vado', description: 'Eliminá 40 orcos antes de que refuercen sus filas.', mode: 'mision', killTarget: 40 },
-  { id: 'defensa_muro', title: 'El Muro del Abismo', description: 'Defendé el muro durante 4 minutos sin que caiga.', mode: 'defensa', durationSec: 240 },
-  { id: 'oleadas_cuerno', title: 'El Cuerno de Helm', description: 'Resistí 6 oleadas de orcos y derrotá a Ugluk al final.', mode: 'oleadas', waveCount: 6 },
+  { id: 'mision_exterminio', title: 'Limpieza del Vado', description: 'Eliminá 46 orcos antes de que refuercen sus filas.', mode: 'mision', killTarget: 46 },
+  { id: 'defensa_muro', title: 'El Muro del Abismo', description: 'Defendé el muro durante 4 minutos y medio sin que caiga.', mode: 'defensa', durationSec: 270 },
+  { id: 'oleadas_cuerno', title: 'El Cuerno de Helm', description: 'Resistí 7 oleadas de orcos y derrotá a Ugluk al final.', mode: 'oleadas', waveCount: 7 },
 ]
 
 export function xpToNextLevel(level: number): number {

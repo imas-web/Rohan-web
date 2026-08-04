@@ -16,7 +16,7 @@ const START_LIVES = 3
 const ATTACK_SWING_DURATION = 0.135
 const GOAL_MARGIN = 40
 const ENEMY_SPAWN_DELAY = 0.4 // espera a que lleguen los primeros player_update de los compañeros antes de contar cuántos somos
-const ENEMY_AGGRO_RANGE = 260
+const ENEMY_AGGRO_RANGE = 300
 const ARROW_FLIGHT_TIME = 0.28
 
 interface ArrowVisual {
@@ -75,13 +75,24 @@ function dist(a: Vec2, b: Vec2) {
   return Math.hypot(a.x - b.x, a.y - b.y)
 }
 
+interface DetourZone {
+  x: number
+  halfWidth: number
+  side: 'up' | 'down'
+  depth: number
+}
+
+function allDetourZones(level: PlatformerLevel): DetourZone[] {
+  return [...level.alcoves, ...level.blockades]
+}
+
 // el carril base es angosto, pero se ensancha localmente donde hay un hueco
-// (alcove) hacia un cofre escondido — así el jugador tiene que desviarse del
-// camino recto para llegar a esos cofres.
+// (alcove hacia un cofre escondido, o un derrumbe/blockade que corta el
+// camino directo) — así el jugador tiene que desviarse del camino recto.
 function laneBoundsAtX(level: PlatformerLevel, x: number): { minY: number; maxY: number } {
   let minY = level.laneMinY
   let maxY = level.laneMaxY
-  for (const a of level.alcoves) {
+  for (const a of allDetourZones(level)) {
     if (x >= a.x - a.halfWidth && x <= a.x + a.halfWidth) {
       if (a.side === 'up') minY = Math.min(minY, level.laneMinY - a.depth)
       else maxY = Math.max(maxY, level.laneMaxY + a.depth)
@@ -93,7 +104,7 @@ function laneBoundsAtX(level: PlatformerLevel, x: number): { minY: number; maxY:
 // segmentos del borde del carril en un lado dado, con "cortes" donde hay un
 // hueco lateral — para no dibujar una línea de pared cruzando la abertura
 function laneBorderSegments(level: PlatformerLevel, side: 'up' | 'down'): [number, number][] {
-  const gaps = level.alcoves
+  const gaps = allDetourZones(level)
     .filter((a) => a.side === side)
     .map((a): [number, number] => [a.x - a.halfWidth, a.x + a.halfWidth])
     .sort((a, b) => a[0] - b[0])
@@ -105,6 +116,23 @@ function laneBorderSegments(level: PlatformerLevel, side: 'up' | 'down'): [numbe
   })
   if (cursor < level.width) segments.push([cursor, level.width])
   return segments
+}
+
+// un derrumbe corta el carril base por completo: si el jugador está dentro
+// de la banda base (no metido en el hueco lateral) no puede cruzar esa x.
+function clampXForBlockades(level: PlatformerLevel, oldX: number, newX: number, y: number): number {
+  const inBaseBand = y >= level.laneMinY && y <= level.laneMaxY
+  if (!inBaseBand) return newX
+  for (const b of level.blockades) {
+    const x0 = b.x - b.halfWidth
+    const x1 = b.x + b.halfWidth
+    if (newX > x0 && newX < x1) {
+      if (oldX <= x0) return x0
+      if (oldX >= x1) return x1
+      return oldX
+    }
+  }
+  return newX
 }
 
 export interface PlatformerCanvasProps {
@@ -427,7 +455,8 @@ export default function PlatformerCanvas({
       if (rightHeldRef.current) moveDir += 1
       lp.vx = moveDir * MOVE_SPEED
       if (moveDir !== 0) lp.facing = moveDir > 0 ? 1 : -1
-      lp.x = Math.min(level.width - 20, Math.max(20, lp.x + lp.vx * dt))
+      const intendedX = Math.min(level.width - 20, Math.max(20, lp.x + lp.vx * dt))
+      lp.x = clampXForBlockades(level, lp.x, intendedX, lp.y)
 
       let moveDirY = 0
       if (upHeldRef.current) moveDirY -= 1
@@ -621,49 +650,29 @@ export default function PlatformerCanvas({
       ctx.fillStyle = '#241C14'
       ctx.fillRect(0, level.laneMinY - wallH, level.width, wallH)
       ctx.fillRect(0, level.laneMaxY, level.width, wallH)
+      const detourZones = allDetourZones(level)
       ctx.fillStyle = 'rgba(90, 80, 60, 0.5)'
       for (let x = 0; x < level.width; x += 90) {
         const jitter = (x * 37) % 30
-        const inUpAlcove = level.alcoves.some((a) => a.side === 'up' && Math.abs(x + jitter - a.x) < a.halfWidth)
-        if (!inUpAlcove) {
+        const inUpZone = detourZones.some((a) => a.side === 'up' && Math.abs(x + jitter - a.x) < a.halfWidth)
+        if (!inUpZone) {
           ctx.beginPath()
           ctx.arc(x + jitter, level.laneMinY - wallH * 0.35, 26, 0, Math.PI * 2)
           ctx.fill()
         }
-        const inDownAlcove = level.alcoves.some((a) => a.side === 'down' && Math.abs(x + 45 - jitter - a.x) < a.halfWidth)
-        if (!inDownAlcove) {
+        const inDownZone = detourZones.some((a) => a.side === 'down' && Math.abs(x + 45 - jitter - a.x) < a.halfWidth)
+        if (!inDownZone) {
           ctx.beginPath()
           ctx.arc(x + 45 - jitter, level.laneMaxY + wallH * 0.35, 26, 0, Math.PI * 2)
           ctx.fill()
         }
       }
 
-      // huecos laterales: se "cava" la pared para abrir un camino visible
-      // hacia cada cofre escondido, con un brillo cálido que marca la entrada
-      level.alcoves.forEach((a) => {
-        const x0 = a.x - a.halfWidth
-        const x1 = a.x + a.halfWidth
-        const notchY = a.side === 'up' ? level.laneMinY - a.depth : level.laneMaxY
-        const glowCy = a.side === 'up' ? level.laneMinY - a.depth * 0.5 : level.laneMaxY + a.depth * 0.5
-
-        ctx.fillStyle = '#3A3226'
-        ctx.fillRect(x0, notchY, x1 - x0, a.depth)
-
-        const glow = ctx.createRadialGradient(a.x, glowCy, 4, a.x, glowCy, a.halfWidth * 1.4)
-        glow.addColorStop(0, 'rgba(201,162,39,0.4)')
-        glow.addColorStop(1, 'rgba(201,162,39,0)')
-        ctx.fillStyle = glow
-        ctx.fillRect(x0 - 20, notchY - 20, x1 - x0 + 40, a.depth + 40)
-
-        ctx.strokeStyle = 'rgba(0,0,0,0.35)'
-        ctx.lineWidth = 5
-        ctx.beginPath()
-        ctx.moveTo(x0, notchY)
-        ctx.lineTo(x0, notchY + a.depth)
-        ctx.moveTo(x1, notchY)
-        ctx.lineTo(x1, notchY + a.depth)
-        ctx.stroke()
-      })
+      // huecos laterales: se "cava" la pared para abrir un camino visible —
+      // dorado para un cofre escondido, gris-azulado para un derrumbe que hay
+      // que rodear obligatoriamente
+      level.alcoves.forEach((a) => drawDetourNotch(a, 'rgba(201,162,39,0.4)'))
+      level.blockades.forEach((b) => drawDetourNotch(b, 'rgba(120,150,168,0.4)'))
 
       // carril caminable
       ctx.fillStyle = '#3A3226'
@@ -686,6 +695,57 @@ export default function PlatformerCanvas({
       for (let x = 0; x < level.width; x += 64) {
         ctx.fillRect(x, level.laneMinY, 2, level.laneMaxY - level.laneMinY)
       }
+
+      // derrumbe: bloquea el paso directo por el carril base — obliga a
+      // desviarse por el hueco lateral que se abrió al lado
+      level.blockades.forEach((b) => {
+        const x0 = b.x - b.halfWidth
+        const x1 = b.x + b.halfWidth
+        ctx.fillStyle = '#4A4438'
+        for (let i = 0; i < 5; i++) {
+          const rx = x0 + ((x1 - x0) * i) / 4
+          const ry = level.laneMinY + ((level.laneMaxY - level.laneMinY) * ((i * 53) % 5)) / 5
+          const rr = 22 + (i % 3) * 6
+          ctx.beginPath()
+          ctx.arc(rx, ry, rr, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'
+        ctx.lineWidth = 2
+        for (let i = 0; i < 5; i++) {
+          const rx = x0 + ((x1 - x0) * i) / 4
+          const ry = level.laneMinY + ((level.laneMaxY - level.laneMinY) * ((i * 53) % 5)) / 5
+          const rr = 22 + (i % 3) * 6
+          ctx.beginPath()
+          ctx.arc(rx, ry, rr, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+      })
+    }
+
+    function drawDetourNotch(a: { x: number; halfWidth: number; side: 'up' | 'down'; depth: number }, glowColorRgba: string) {
+      const x0 = a.x - a.halfWidth
+      const x1 = a.x + a.halfWidth
+      const notchY = a.side === 'up' ? level.laneMinY - a.depth : level.laneMaxY
+      const glowCy = a.side === 'up' ? level.laneMinY - a.depth * 0.5 : level.laneMaxY + a.depth * 0.5
+
+      ctx.fillStyle = '#3A3226'
+      ctx.fillRect(x0, notchY, x1 - x0, a.depth)
+
+      const glow = ctx.createRadialGradient(a.x, glowCy, 4, a.x, glowCy, a.halfWidth * 1.4)
+      glow.addColorStop(0, glowColorRgba)
+      glow.addColorStop(1, glowColorRgba.replace(/[\d.]+\)$/, '0)'))
+      ctx.fillStyle = glow
+      ctx.fillRect(x0 - 20, notchY - 20, x1 - x0 + 40, a.depth + 40)
+
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'
+      ctx.lineWidth = 5
+      ctx.beginPath()
+      ctx.moveTo(x0, notchY)
+      ctx.lineTo(x0, notchY + a.depth)
+      ctx.moveTo(x1, notchY)
+      ctx.lineTo(x1, notchY + a.depth)
+      ctx.stroke()
     }
 
     function drawFlagPole(x: number, y: number, color: string, label: string) {
