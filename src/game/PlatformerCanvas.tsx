@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { ChestInstance, MissionDef, EnemyInstance, Vec2 } from './types'
 import { ENEMIES, enemyCountMultiplierForParty, getArmor, getClass, getWeapon, rewardMultiplierForParty, xpToNextLevel } from './data'
-import { PLATFORMER_LEVEL } from './platformerLevel'
+import { PLATFORMER_LEVEL, type PlatformerLevel } from './platformerLevel'
 import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supabase/multiplayer'
 import { drawBar, drawHumanoid } from './render'
 import { drawSprite, preloadSprites, type SpriteKey } from './sprites'
@@ -73,6 +73,38 @@ function damageReductionFromDefense(defense: number) {
 
 function dist(a: Vec2, b: Vec2) {
   return Math.hypot(a.x - b.x, a.y - b.y)
+}
+
+// el carril base es angosto, pero se ensancha localmente donde hay un hueco
+// (alcove) hacia un cofre escondido — así el jugador tiene que desviarse del
+// camino recto para llegar a esos cofres.
+function laneBoundsAtX(level: PlatformerLevel, x: number): { minY: number; maxY: number } {
+  let minY = level.laneMinY
+  let maxY = level.laneMaxY
+  for (const a of level.alcoves) {
+    if (x >= a.x - a.halfWidth && x <= a.x + a.halfWidth) {
+      if (a.side === 'up') minY = Math.min(minY, level.laneMinY - a.depth)
+      else maxY = Math.max(maxY, level.laneMaxY + a.depth)
+    }
+  }
+  return { minY, maxY }
+}
+
+// segmentos del borde del carril en un lado dado, con "cortes" donde hay un
+// hueco lateral — para no dibujar una línea de pared cruzando la abertura
+function laneBorderSegments(level: PlatformerLevel, side: 'up' | 'down'): [number, number][] {
+  const gaps = level.alcoves
+    .filter((a) => a.side === side)
+    .map((a): [number, number] => [a.x - a.halfWidth, a.x + a.halfWidth])
+    .sort((a, b) => a[0] - b[0])
+  const segments: [number, number][] = []
+  let cursor = 0
+  gaps.forEach(([gx0, gx1]) => {
+    if (gx0 > cursor) segments.push([cursor, gx0])
+    cursor = Math.max(cursor, gx1)
+  })
+  if (cursor < level.width) segments.push([cursor, level.width])
+  return segments
 }
 
 export interface PlatformerCanvasProps {
@@ -401,7 +433,8 @@ export default function PlatformerCanvas({
       if (upHeldRef.current) moveDirY -= 1
       if (downHeldRef.current) moveDirY += 1
       lp.vy = moveDirY * MOVE_SPEED_Y
-      lp.y = Math.min(level.laneMaxY, Math.max(level.laneMinY, lp.y + lp.vy * dt))
+      const yBounds = laneBoundsAtX(level, lp.x)
+      lp.y = Math.min(yBounds.maxY, Math.max(yBounds.minY, lp.y + lp.vy * dt))
 
       tryCollectChests()
 
@@ -591,24 +624,64 @@ export default function PlatformerCanvas({
       ctx.fillStyle = 'rgba(90, 80, 60, 0.5)'
       for (let x = 0; x < level.width; x += 90) {
         const jitter = (x * 37) % 30
-        ctx.beginPath()
-        ctx.arc(x + jitter, level.laneMinY - wallH * 0.35, 26, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.beginPath()
-        ctx.arc(x + 45 - jitter, level.laneMaxY + wallH * 0.35, 26, 0, Math.PI * 2)
-        ctx.fill()
+        const inUpAlcove = level.alcoves.some((a) => a.side === 'up' && Math.abs(x + jitter - a.x) < a.halfWidth)
+        if (!inUpAlcove) {
+          ctx.beginPath()
+          ctx.arc(x + jitter, level.laneMinY - wallH * 0.35, 26, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        const inDownAlcove = level.alcoves.some((a) => a.side === 'down' && Math.abs(x + 45 - jitter - a.x) < a.halfWidth)
+        if (!inDownAlcove) {
+          ctx.beginPath()
+          ctx.arc(x + 45 - jitter, level.laneMaxY + wallH * 0.35, 26, 0, Math.PI * 2)
+          ctx.fill()
+        }
       }
+
+      // huecos laterales: se "cava" la pared para abrir un camino visible
+      // hacia cada cofre escondido, con un brillo cálido que marca la entrada
+      level.alcoves.forEach((a) => {
+        const x0 = a.x - a.halfWidth
+        const x1 = a.x + a.halfWidth
+        const notchY = a.side === 'up' ? level.laneMinY - a.depth : level.laneMaxY
+        const glowCy = a.side === 'up' ? level.laneMinY - a.depth * 0.5 : level.laneMaxY + a.depth * 0.5
+
+        ctx.fillStyle = '#3A3226'
+        ctx.fillRect(x0, notchY, x1 - x0, a.depth)
+
+        const glow = ctx.createRadialGradient(a.x, glowCy, 4, a.x, glowCy, a.halfWidth * 1.4)
+        glow.addColorStop(0, 'rgba(201,162,39,0.4)')
+        glow.addColorStop(1, 'rgba(201,162,39,0)')
+        ctx.fillStyle = glow
+        ctx.fillRect(x0 - 20, notchY - 20, x1 - x0 + 40, a.depth + 40)
+
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)'
+        ctx.lineWidth = 5
+        ctx.beginPath()
+        ctx.moveTo(x0, notchY)
+        ctx.lineTo(x0, notchY + a.depth)
+        ctx.moveTo(x1, notchY)
+        ctx.lineTo(x1, notchY + a.depth)
+        ctx.stroke()
+      })
+
       // carril caminable
       ctx.fillStyle = '#3A3226'
       ctx.fillRect(0, level.laneMinY, level.width, level.laneMaxY - level.laneMinY)
       ctx.strokeStyle = 'rgba(0,0,0,0.35)'
       ctx.lineWidth = 6
-      ctx.beginPath()
-      ctx.moveTo(0, level.laneMinY)
-      ctx.lineTo(level.width, level.laneMinY)
-      ctx.moveTo(0, level.laneMaxY)
-      ctx.lineTo(level.width, level.laneMaxY)
-      ctx.stroke()
+      laneBorderSegments(level, 'up').forEach(([sx0, sx1]) => {
+        ctx.beginPath()
+        ctx.moveTo(sx0, level.laneMinY)
+        ctx.lineTo(sx1, level.laneMinY)
+        ctx.stroke()
+      })
+      laneBorderSegments(level, 'down').forEach(([sx0, sx1]) => {
+        ctx.beginPath()
+        ctx.moveTo(sx0, level.laneMaxY)
+        ctx.lineTo(sx1, level.laneMaxY)
+        ctx.stroke()
+      })
       ctx.fillStyle = 'rgba(0,0,0,0.12)'
       for (let x = 0; x < level.width; x += 64) {
         ctx.fillRect(x, level.laneMinY, 2, level.laneMaxY - level.laneMinY)

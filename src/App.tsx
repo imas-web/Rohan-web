@@ -59,6 +59,7 @@ export default function App() {
           ultimateRank: saved.ultimateRank ?? 1,
           activeAbilityId: saved.activeAbilityId ?? defaultAbilityForClass(saved.classId ?? 'guerrero'),
           unlockedAbilityIds: saved.unlockedAbilityIds ?? [defaultAbilityForClass(saved.classId ?? 'guerrero')],
+          completedMissionIds: saved.completedMissionIds ?? [],
         }
       : {
           level: 1,
@@ -69,6 +70,7 @@ export default function App() {
           ultimateRank: 1,
           activeAbilityId: defaultAbilityForClass('guerrero'),
           unlockedAbilityIds: [defaultAbilityForClass('guerrero')],
+          completedMissionIds: [],
         }
   )
   const [room, setRoom] = useState<MultiplayerRoom | null>(null)
@@ -88,6 +90,7 @@ export default function App() {
       ultimateRank: 1,
       activeAbilityId: defaultAbilityForClass(classId),
       unlockedAbilityIds: [defaultAbilityForClass(classId)],
+      completedMissionIds: [],
     })
   }
 
@@ -150,13 +153,17 @@ export default function App() {
     setScreen('game')
   }
 
-  function handleExit(result: { finalLevel: number; finalXp: number; finalMaterials: number; finalGold: number }) {
+  function handleExit(result: { victory: boolean; finalLevel: number; finalXp: number; finalMaterials: number; finalGold: number }) {
     setProgress((prev) => ({
       ...prev,
       level: result.finalLevel,
       xp: result.finalXp,
       materials: result.finalMaterials,
       gold: result.finalGold,
+      completedMissionIds:
+        result.victory && mission && !prev.completedMissionIds.includes(mission.id)
+          ? [...prev.completedMissionIds, mission.id]
+          : prev.completedMissionIds,
     }))
     setScreen('camp')
   }

@@ -481,6 +481,11 @@ input {
   flex: 1;
 }
 
+.mission-card.locked {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+}
+
 /* ---------- Juego ---------- */
 
 .game-root {

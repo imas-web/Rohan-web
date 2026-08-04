@@ -28,6 +28,7 @@ export interface Progress {
   ultimateRank: number
   activeAbilityId: string
   unlockedAbilityIds: string[]
+  completedMissionIds: string[]
 }
 
 export default function CampScreen({
@@ -80,7 +81,13 @@ export default function CampScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room])
 
-  function startMission(mission: MissionDef) {
+  function isMissionUnlocked(index: number) {
+    if (index === 0) return true
+    return progress.completedMissionIds.includes(MISSIONS[index - 1].id)
+  }
+
+  function startMission(mission: MissionDef, index: number) {
+    if (!isMissionUnlocked(index)) return
     if (room) {
       if (!isHost) return
       room.sendGameStart(mission.id)
@@ -193,24 +200,33 @@ export default function CampScreen({
       <section className="camp-section">
         <h2>Misiones</h2>
         <div className="mission-grid">
-          {MISSIONS.map((m) => (
-            <div key={m.id} className="mission-card">
-              <span className="mission-mode">
-                {m.mode === 'oleadas'
-                  ? 'Oleadas + jefe'
-                  : m.mode === 'defensa'
-                  ? 'Defender base'
-                  : m.mode === 'plataformas'
-                  ? 'Desfiladero'
-                  : 'Misión'}
-              </span>
-              <h3>{m.title}</h3>
-              <p>{m.description}</p>
-              <button className="btn-primary" disabled={!!room && !isHost} onClick={() => startMission(m)}>
-                {room && !isHost ? 'Esperando al líder' : 'Comenzar aventura'}
-              </button>
-            </div>
-          ))}
+          {MISSIONS.map((m, i) => {
+            const unlocked = isMissionUnlocked(i)
+            const completed = progress.completedMissionIds.includes(m.id)
+            return (
+              <div key={m.id} className={`mission-card ${!unlocked ? 'locked' : ''}`}>
+                <span className="mission-mode">
+                  {m.mode === 'oleadas'
+                    ? 'Oleadas + jefe'
+                    : m.mode === 'defensa'
+                    ? 'Defender base'
+                    : m.mode === 'plataformas'
+                    ? 'Desfiladero'
+                    : 'Misión'}
+                  {completed ? ' · Completada' : ''}
+                </span>
+                <h3>{m.title}</h3>
+                <p>{unlocked ? m.description : `Completá primero "${MISSIONS[i - 1].title}" para desbloquearla.`}</p>
+                <button
+                  className="btn-primary"
+                  disabled={!unlocked || (!!room && !isHost)}
+                  onClick={() => startMission(m, i)}
+                >
+                  {!unlocked ? 'Bloqueada' : room && !isHost ? 'Esperando al líder' : completed ? 'Rejugar' : 'Comenzar aventura'}
+                </button>
+              </div>
+            )
+          })}
         </div>
       </section>
     </div>
