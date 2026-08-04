@@ -1,6 +1,17 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { MissionDef, EnemyInstance, Vec2 } from './types'
-import { ENEMIES, getAbility, getArmor, getClass, getWeapon, ultimateCooldownMult, ultimatePowerMult, xpToNextLevel } from './data'
+import {
+  ENEMIES,
+  enemyCountMultiplierForParty,
+  getAbility,
+  getArmor,
+  getClass,
+  getWeapon,
+  rewardMultiplierForParty,
+  ultimateCooldownMult,
+  ultimatePowerMult,
+  xpToNextLevel,
+} from './data'
 import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supabase/multiplayer'
 import HUD, { type HudState } from '../ui/HUD'
 import TouchControls from '../ui/TouchControls'
@@ -269,16 +280,19 @@ export default function GameCanvas({
       enemiesRef.current.delete(uid)
       const def = ENEMIES[e.defId]
       missionStateRef.current.kills += 1
-      const materialsDrop = def.isBoss ? 60 : Math.max(1, Math.ceil(def.xpReward / 4))
+      const partySize = remotePlayersRef.current.size + 1
+      const rewardMult = rewardMultiplierForParty(partySize)
+      const xpReward = Math.max(1, Math.round(def.xpReward * rewardMult))
+      const materialsDrop = Math.max(1, Math.round((def.isBoss ? 60 : Math.ceil(def.xpReward / 4)) * rewardMult))
       pendingKillAnnounceRef.current = {
         killerId: attackerId,
-        xpReward: def.xpReward,
+        xpReward,
         enemyName: def.name,
         enemyUid: uid,
         materialsDrop,
       }
       if (attackerId === localRef.current.id) {
-        grantXpAndMaterials(def.xpReward, materialsDrop, def.name)
+        grantXpAndMaterials(xpReward, materialsDrop, def.name)
       }
     }
   }
@@ -471,6 +485,8 @@ export default function GameCanvas({
     function hostUpdateMission(dt: number) {
       const ms = missionStateRef.current
       if (ms.finished) return
+      const partySize = remotePlayersRef.current.size + 1
+      const countMult = enemyCountMultiplierForParty(partySize)
 
       if (mission.mode === 'oleadas') {
         const aliveEnemies = enemiesRef.current.size
@@ -482,7 +498,7 @@ export default function GameCanvas({
             spawnEnemy('jefe_ugluk', { x: WORLD_W / 2, y: 80 })
             floatingRef.current.push({ pos: { x: WORLD_W / 2, y: 200 }, text: '¡Ugluk ha llegado!', color: '#C1502E', life: 2, vy: -10 })
           } else {
-            const count = 2 + Math.floor(ms.wave * 1.5)
+            const count = Math.round((2 + Math.floor(ms.wave * 1.5)) * countMult)
             for (let i = 0; i < count; i++) spawnEnemy(pickEnemyDefForWave(ms.wave, false), randomEdgeSpawnPos())
             ms.wave += 1
             ms.waveClearedPause = 3.5
@@ -496,7 +512,7 @@ export default function GameCanvas({
         ms.spawnTimer -= dt
         const intensity = 1 + (mission.durationSec! - ms.timeLeft) / 70
         if (ms.spawnTimer <= 0) {
-          ms.spawnTimer = Math.max(0.9, 2.6 / intensity)
+          ms.spawnTimer = Math.max(0.9, 2.6 / intensity) / countMult
           spawnEnemy(pickEnemyDefForWave(Math.floor(intensity), true), randomEdgeSpawnPos())
         }
         if (ms.baseHp <= 0) {
@@ -508,11 +524,11 @@ export default function GameCanvas({
         }
       } else if (mission.mode === 'mision') {
         ms.spawnTimer -= dt
-        if (ms.spawnTimer <= 0 && enemiesRef.current.size < 8) {
-          ms.spawnTimer = 1.7
+        if (ms.spawnTimer <= 0 && enemiesRef.current.size < 8 * countMult) {
+          ms.spawnTimer = 1.7 / countMult
           spawnEnemy(pickEnemyDefForWave(2, false), randomEdgeSpawnPos())
         }
-        if (ms.kills >= (mission.killTarget ?? 40)) {
+        if (ms.kills >= Math.round((mission.killTarget ?? 40) * countMult)) {
           ms.finished = true
           ms.victory = true
         }
@@ -1107,7 +1123,9 @@ export default function GameCanvas({
         waveCount: mission.waveCount,
         timeLeft: ms.timeLeft,
         kills: ms.kills,
-        killTarget: mission.killTarget,
+        killTarget: mission.killTarget
+          ? Math.round(mission.killTarget * enemyCountMultiplierForParty(remotePlayersRef.current.size + 1))
+          : mission.killTarget,
         baseHp: ms.baseHp,
         baseMaxHp: BASE_MAX_HP,
         alive: lp.alive,

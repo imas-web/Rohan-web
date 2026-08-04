@@ -37,11 +37,11 @@ export const ARMORS: ArmorDef[] = [
 ]
 
 export const ENEMIES: Record<string, EnemyDef> = {
-  orco_explorador: { id: 'orco_explorador', name: 'Orco explorador', hp: 20, damage: 5, speed: 72, radius: 14, xpReward: 8, color: '#7A8B5C', attackRange: 34, attackCooldown: 1.0 },
-  orco_guerrero: { id: 'orco_guerrero', name: 'Orco guerrero', hp: 36, damage: 8, speed: 58, radius: 16, xpReward: 14, color: '#5F6E43', attackRange: 36, attackCooldown: 1.1 },
-  arquero_uruk: { id: 'arquero_uruk', name: 'Arquero Uruk-hai', hp: 26, damage: 6, speed: 52, radius: 14, xpReward: 16, color: '#3E4A6B', ranged: true, attackRange: 190, attackCooldown: 1.6 },
-  berserker_uruk: { id: 'berserker_uruk', name: 'Berserker Uruk-hai', hp: 75, damage: 14, speed: 66, radius: 20, xpReward: 30, color: '#8B3A2B', attackRange: 42, attackCooldown: 1.3 },
-  jefe_ugluk: { id: 'jefe_ugluk', name: 'Ugluk, capitán Uruk-hai', hp: 750, damage: 20, speed: 54, radius: 34, xpReward: 400, color: '#C1502E', attackRange: 60, attackCooldown: 0.9, isBoss: true },
+  orco_explorador: { id: 'orco_explorador', name: 'Orco explorador', hp: 20, damage: 5, speed: 72, radius: 14, xpReward: 5, color: '#7A8B5C', attackRange: 34, attackCooldown: 1.0 },
+  orco_guerrero: { id: 'orco_guerrero', name: 'Orco guerrero', hp: 36, damage: 8, speed: 58, radius: 16, xpReward: 9, color: '#5F6E43', attackRange: 36, attackCooldown: 1.1 },
+  arquero_uruk: { id: 'arquero_uruk', name: 'Arquero Uruk-hai', hp: 26, damage: 6, speed: 52, radius: 14, xpReward: 10, color: '#3E4A6B', ranged: true, attackRange: 190, attackCooldown: 1.6 },
+  berserker_uruk: { id: 'berserker_uruk', name: 'Berserker Uruk-hai', hp: 75, damage: 14, speed: 66, radius: 20, xpReward: 18, color: '#8B3A2B', attackRange: 42, attackCooldown: 1.3 },
+  jefe_ugluk: { id: 'jefe_ugluk', name: 'Ugluk, capitán Uruk-hai', hp: 750, damage: 20, speed: 54, radius: 34, xpReward: 260, color: '#C1502E', attackRange: 60, attackCooldown: 0.9, isBoss: true },
 }
 
 export const CLASSES: ClassDef[] = [
@@ -154,6 +154,18 @@ export const MISSIONS: MissionDef[] = [
 
 export function xpToNextLevel(level: number): number {
   return Math.round(30 * Math.pow(level, 1.35) + 20)
+}
+
+// Con más jugadores en la partida aparecen más enemigos (misma cantidad de
+// "presión" por jugador que jugando solo), pero cada uno da menos experiencia
+// y materiales — así el total que gana cada jugador se mantiene parecido a
+// lo que ganaría jugando solo, en vez de multiplicarse por el tamaño del grupo.
+export function enemyCountMultiplierForParty(partySize: number): number {
+  return Math.max(1, partySize)
+}
+
+export function rewardMultiplierForParty(partySize: number): number {
+  return 1 / Math.max(1, partySize)
 }
 
 export function getWeapon(id: string): WeaponDef {

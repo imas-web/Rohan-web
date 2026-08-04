@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { MissionDef, EnemyInstance, Vec2 } from './types'
-import { ENEMIES, getArmor, getWeapon, xpToNextLevel } from './data'
+import { ENEMIES, enemyCountMultiplierForParty, getArmor, getWeapon, rewardMultiplierForParty, xpToNextLevel } from './data'
 import { PLATFORMER_LEVEL } from './platformerLevel'
 import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supabase/multiplayer'
 import { drawBar, drawHumanoid } from './render'
@@ -16,6 +16,7 @@ const INVULN_DURATION = 1.4
 const START_LIVES = 3
 const ATTACK_SWING_DURATION = 0.135
 const GOAL_MARGIN = 40
+const ENEMY_SPAWN_DELAY = 0.4 // espera a que lleguen los primeros player_update de los compañeros antes de contar cuántos somos
 
 interface LocalPlatformer {
   id: string
@@ -157,26 +158,38 @@ export default function PlatformerCanvas({
   const camXRef = useRef(level.startPos.x)
   const camYRef = useRef(level.startPos.y)
 
-  function spawnEnemies() {
+  const enemiesSpawnedRef = useRef(false)
+  const spawnElapsedRef = useRef(0)
+
+  function spawnEnemies(partySize: number) {
     enemiesRef.current.clear()
     patrolBoundsRef.current.clear()
-    level.enemies.forEach((spec, i) => {
+    // con más jugadores hay más copias de cada patrulla (una al lado de la
+    // otra, en el mismo tramo) para que la cantidad de enemigos escale con
+    // el grupo, igual que en las otras misiones.
+    const copies = Math.round(enemyCountMultiplierForParty(partySize))
+    let uidCounter = 0
+    level.enemies.forEach((spec) => {
       const def = ENEMIES[spec.defId]
-      const uid = `pe_${i}`
-      enemiesRef.current.set(uid, {
-        uid,
-        defId: spec.defId,
-        pos: { x: spec.x, y: spec.y },
-        hp: def.hp,
-        maxHp: def.hp,
-        attackCooldownLeft: 0,
-        targetId: null,
-        hitFlash: 0,
-      })
-      patrolBoundsRef.current.set(uid, { minX: spec.minX, maxX: spec.maxX, dir: 1 })
+      const rangeW = Math.max(1, spec.maxX - spec.minX)
+      for (let c = 0; c < copies; c++) {
+        const uid = `pe_${uidCounter++}`
+        const offset = c === 0 ? 0 : (c * 37) % rangeW
+        const startX = spec.minX + ((spec.x - spec.minX + offset) % rangeW)
+        enemiesRef.current.set(uid, {
+          uid,
+          defId: spec.defId,
+          pos: { x: startX, y: spec.y },
+          hp: def.hp,
+          maxHp: def.hp,
+          attackCooldownLeft: 0,
+          targetId: null,
+          hitFlash: 0,
+        })
+        patrolBoundsRef.current.set(uid, { minX: spec.minX, maxX: spec.maxX, dir: c % 2 === 0 ? 1 : -1 })
+      }
     })
   }
-  if (enemiesRef.current.size === 0 && isHostRef.current) spawnEnemies()
 
   function allPlayerPositions(): { id: string; pos: Vec2; alive: boolean; armorId: string }[] {
     const list: { id: string; pos: Vec2; alive: boolean; armorId: string }[] = [
@@ -238,7 +251,11 @@ export default function PlatformerCanvas({
       enemiesRef.current.delete(uid)
       patrolBoundsRef.current.delete(uid)
       const def = ENEMIES[e.defId]
-      grantRewards(def.xpReward, Math.max(1, Math.ceil(def.xpReward / 4)))
+      const partySize = remotePlayersRef.current.size + 1
+      const rewardMult = rewardMultiplierForParty(partySize)
+      const xp = Math.max(1, Math.round(def.xpReward * rewardMult))
+      const materials = Math.max(1, Math.round(Math.ceil(def.xpReward / 4) * rewardMult))
+      grantRewards(xp, materials)
     }
   }
 
@@ -387,6 +404,15 @@ export default function PlatformerCanvas({
       lastTs = ts
 
       updateLocal(dt)
+
+      if (isHostRef.current && !enemiesSpawnedRef.current) {
+        spawnElapsedRef.current += dt
+        if (spawnElapsedRef.current >= ENEMY_SPAWN_DELAY) {
+          spawnEnemies(remotePlayersRef.current.size + 1)
+          enemiesSpawnedRef.current = true
+        }
+      }
+
       if (isHostRef.current) hostUpdateEnemies(dt)
 
       const lp = localRef.current
