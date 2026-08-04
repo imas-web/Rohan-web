@@ -908,6 +908,7 @@ export default function GameCanvas({
 
       // castillo: patio amurallado con torres y puertas, siempre presente
       drawCastle()
+      drawCourtyardDecor()
 
       // torreón central: siempre visible; solo muestra vida cuando hay que defenderlo
       drawKeep()
@@ -1173,6 +1174,110 @@ export default function GameCanvas({
       drawTower(cx + rOut, cy - rOut)
       drawTower(cx - rOut, cy + rOut)
       drawTower(cx + rOut, cy + rOut)
+    }
+
+    // el patio es donde el jugador pasa la mayor parte del tiempo, así que la
+    // ambientación temática tiene que estar ACÁ adentro, no solo en el borde
+    // del mundo — antorchas y estandartes en los muros interiores, grietas y
+    // charcos en el piso, según la misión.
+    function wallInnerPositions(inset: number, gateMargin: number): Vec2[] {
+      const cx = CASTLE_CX
+      const cy = CASTLE_CY
+      const rIn = CASTLE_R_IN
+      const offsets = [-(CASTLE_GATE_HALF + gateMargin + 40), -(CASTLE_GATE_HALF + gateMargin), CASTLE_GATE_HALF + gateMargin, CASTLE_GATE_HALF + gateMargin + 40]
+      const positions: Vec2[] = []
+      offsets.forEach((o) => {
+        positions.push({ x: cx + o, y: cy - rIn + inset })
+        positions.push({ x: cx + o, y: cy + rIn - inset })
+        positions.push({ x: cx - rIn + inset, y: cy + o })
+        positions.push({ x: cx + rIn - inset, y: cy + o })
+      })
+      return positions
+    }
+
+    function drawCourtyardDecor() {
+      const cx = CASTLE_CX
+      const cy = CASTLE_CY
+      const rIn = CASTLE_R_IN
+
+      if (mission.id === 'mision_exterminio') {
+        // charcos del vado y musgo trepando la base de los muros interiores
+        ctx.fillStyle = 'rgba(79, 140, 158, 0.2)'
+        for (let i = 0; i < 9; i++) {
+          const px = cx + ((i * 337) % (rIn * 1.7)) - rIn * 0.85
+          const py = cy + ((i * 251) % (rIn * 1.7)) - rIn * 0.85
+          if (Math.hypot(px - cx, py - cy) < 80) continue
+          ctx.beginPath()
+          ctx.ellipse(px, py, 20, 11, (i * 0.7) % Math.PI, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        ctx.fillStyle = 'rgba(90, 130, 110, 0.35)'
+        wallInnerPositions(12, 30).forEach((p) => {
+          ctx.beginPath()
+          ctx.arc(p.x, p.y, 9, 0, Math.PI * 2)
+          ctx.fill()
+        })
+      } else if (mission.id === 'defensa_muro') {
+        // grietas, marcas de quemado y antorchas encendidas en el muro interior
+        ctx.strokeStyle = 'rgba(20, 15, 10, 0.4)'
+        ctx.lineWidth = 2
+        for (let i = 0; i < 10; i++) {
+          const px = cx + ((i * 293) % (rIn * 1.7)) - rIn * 0.85
+          const py = cy + ((i * 197) % (rIn * 1.7)) - rIn * 0.85
+          if (Math.hypot(px - cx, py - cy) < 80) continue
+          ctx.beginPath()
+          ctx.moveTo(px, py)
+          ctx.lineTo(px + 14, py + 8)
+          ctx.lineTo(px + 4, py + 20)
+          ctx.stroke()
+        }
+        const flicker = 0.5 + Math.sin(performance.now() / 140) * 0.15
+        wallInnerPositions(10, 10).forEach((p) => {
+          const glow = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, 40)
+          glow.addColorStop(0, `rgba(217, 103, 63, ${flicker})`)
+          glow.addColorStop(1, 'rgba(217, 103, 63, 0)')
+          ctx.fillStyle = glow
+          ctx.fillRect(p.x - 40, p.y - 40, 80, 80)
+          ctx.fillStyle = '#2B2118'
+          ctx.fillRect(p.x - 4, p.y - 6, 8, 14)
+        })
+      } else if (mission.id === 'oleadas_cuerno') {
+        // antorchas moradas en el muro interior y estandartes colgando
+        const flicker = 0.55 + Math.sin(performance.now() / 160) * 0.2
+        wallInnerPositions(10, 10).forEach((p) => {
+          const glow = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, 36)
+          glow.addColorStop(0, `rgba(138, 76, 155, ${flicker})`)
+          glow.addColorStop(1, 'rgba(138, 76, 155, 0)')
+          ctx.fillStyle = glow
+          ctx.fillRect(p.x - 36, p.y - 36, 72, 72)
+          ctx.fillStyle = '#211D2C'
+          ctx.fillRect(p.x - 3, p.y - 10, 6, 18)
+          ctx.fillStyle = '#C9A9E0'
+          ctx.beginPath()
+          ctx.arc(p.x, p.y - 12, 4, 0, Math.PI * 2)
+          ctx.fill()
+        })
+        // grietas violetas que irradian desde el torreón central
+        ctx.strokeStyle = 'rgba(138, 76, 155, 0.25)'
+        ctx.lineWidth = 2
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + 0.15
+          ctx.beginPath()
+          ctx.moveTo(cx + Math.cos(a) * 60, cy + Math.sin(a) * 60)
+          ctx.lineTo(cx + Math.cos(a) * 130, cy + Math.sin(a) * 140)
+          ctx.stroke()
+        }
+        // estandartes colgando de las 4 torres
+        ctx.fillStyle = '#5B3A6B'
+        ;[
+          { x: cx - CASTLE_R_OUT, y: cy - CASTLE_R_OUT },
+          { x: cx + CASTLE_R_OUT, y: cy - CASTLE_R_OUT },
+          { x: cx - CASTLE_R_OUT, y: cy + CASTLE_R_OUT },
+          { x: cx + CASTLE_R_OUT, y: cy + CASTLE_R_OUT },
+        ].forEach((t) => {
+          ctx.fillRect(t.x - 6, t.y + 20, 12, 34)
+        })
+      }
     }
 
     function drawKeep() {
