@@ -723,6 +723,57 @@ export default function PlatformerCanvas({
       })
     }
 
+    function drawWallTorches() {
+      const detourZones = allDetourZones(level)
+      const flicker = 0.55 + Math.sin(performance.now() / 150) * 0.2
+      for (let x = 140; x < level.width; x += 260) {
+        const nearZone = detourZones.some((z) => Math.abs(x - z.x) < z.halfWidth + 30)
+        if (nearZone) continue
+        ;[level.laneMinY, level.laneMaxY].forEach((wallY, i) => {
+          const dir = i === 0 ? -1 : 1
+          const tx = x
+          const ty = wallY + dir * 14
+          const glow = ctx.createRadialGradient(tx, ty, 2, tx, ty, 38)
+          glow.addColorStop(0, `rgba(217, 140, 63, ${flicker})`)
+          glow.addColorStop(1, 'rgba(217, 140, 63, 0)')
+          ctx.fillStyle = glow
+          ctx.fillRect(tx - 38, ty - 38, 76, 76)
+          ctx.fillStyle = '#2B2118'
+          ctx.fillRect(tx - 3, dir < 0 ? ty - 2 : ty - 14, 6, 16)
+          ctx.fillStyle = '#E8A94A'
+          ctx.beginPath()
+          ctx.arc(tx, ty - dir * 12, 5, 0, Math.PI * 2)
+          ctx.fill()
+        })
+      }
+    }
+
+    function drawFloorDetail() {
+      const detourZones = allDetourZones(level)
+      for (let x = 40; x < level.width; x += 70) {
+        const seed = (x * 71) % 233
+        const fy = level.laneMinY + 14 + (seed % (level.laneMaxY - level.laneMinY - 28))
+        const nearZone = detourZones.some((z) => Math.abs(x - z.x) < z.halfWidth + 20)
+        if (nearZone) continue
+        if (seed % 3 === 0) {
+          ctx.fillStyle = 'rgba(90, 110, 70, 0.35)'
+          for (let i = 0; i < 3; i++) {
+            ctx.beginPath()
+            ctx.moveTo(x + i * 4, fy + 6)
+            ctx.lineTo(x + i * 4 - 2, fy - 6)
+            ctx.lineTo(x + i * 4 + 2, fy - 6)
+            ctx.closePath()
+            ctx.fill()
+          }
+        } else if (seed % 3 === 1) {
+          ctx.fillStyle = 'rgba(20, 16, 10, 0.3)'
+          ctx.beginPath()
+          ctx.arc(x, fy, 5, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
+
     function drawDetourNotch(a: { x: number; halfWidth: number; side: 'up' | 'down'; depth: number }, glowColorRgba: string) {
       const x0 = a.x - a.halfWidth
       const x1 = a.x + a.halfWidth
@@ -774,14 +825,38 @@ export default function PlatformerCanvas({
       const camX = camXRef.current
       const camY = camYRef.current
 
-      // cielo con montañas de fondo (paralaje)
+      // cielo de atardecer en la montaña, con luna y estrellas
       const sky = ctx.createLinearGradient(0, 0, 0, h)
-      sky.addColorStop(0, '#2A2115')
+      sky.addColorStop(0, '#2E2038')
+      sky.addColorStop(0.45, '#3A2A22')
       sky.addColorStop(1, '#171C12')
       ctx.fillStyle = sky
       ctx.fillRect(0, 0, w, h)
 
-      ctx.fillStyle = 'rgba(90, 80, 60, 0.35)'
+      const moonX = w * 0.78 - camX * 0.05
+      ctx.beginPath()
+      ctx.arc(moonX, h * 0.16, 34, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(232, 223, 200, 0.55)'
+      ctx.fill()
+      ctx.fillStyle = 'rgba(232, 223, 200, 0.5)'
+      for (let i = 0; i < 40; i++) {
+        const sx = (i * 173 - camX * 0.03) % w
+        const sy = (i * 89) % (h * 0.5)
+        ctx.fillRect(sx < 0 ? sx + w : sx, sy, 2, 2)
+      }
+
+      // 3 capas de montañas en paralaje para dar sensación de paisaje profundo
+      ctx.fillStyle = 'rgba(60, 55, 75, 0.3)'
+      for (let i = -1; i < 8; i++) {
+        const bx = i * 520 - (camX * 0.1) % 520
+        ctx.beginPath()
+        ctx.moveTo(bx, h * 0.55)
+        ctx.lineTo(bx + 260, h * 0.55 - 240)
+        ctx.lineTo(bx + 520, h * 0.55)
+        ctx.closePath()
+        ctx.fill()
+      }
+      ctx.fillStyle = 'rgba(100, 90, 75, 0.32)'
       for (let i = -1; i < 8; i++) {
         const bx = i * 420 - (camX * 0.25) % 420
         ctx.beginPath()
@@ -790,7 +865,32 @@ export default function PlatformerCanvas({
         ctx.lineTo(bx + 420, h * 0.62)
         ctx.closePath()
         ctx.fill()
+        // nieve en la cumbre
+        ctx.fillStyle = 'rgba(220, 220, 220, 0.4)'
+        ctx.beginPath()
+        ctx.moveTo(bx + 210, h * 0.62 - 180)
+        ctx.lineTo(bx + 178, h * 0.62 - 130)
+        ctx.lineTo(bx + 242, h * 0.62 - 130)
+        ctx.closePath()
+        ctx.fill()
+        ctx.fillStyle = 'rgba(100, 90, 75, 0.32)'
       }
+      ctx.fillStyle = 'rgba(40, 34, 26, 0.5)'
+      for (let i = -1; i < 10; i++) {
+        const bx = i * 340 - (camX * 0.45) % 340
+        ctx.beginPath()
+        ctx.moveTo(bx, h * 0.7)
+        ctx.lineTo(bx + 170, h * 0.7 - 130)
+        ctx.lineTo(bx + 340, h * 0.7)
+        ctx.closePath()
+        ctx.fill()
+      }
+      // niebla baja entre las montañas y el desfiladero
+      const fog = ctx.createLinearGradient(0, h * 0.66, 0, h * 0.78)
+      fog.addColorStop(0, 'rgba(200, 200, 210, 0)')
+      fog.addColorStop(1, 'rgba(200, 200, 210, 0.12)')
+      ctx.fillStyle = fog
+      ctx.fillRect(0, h * 0.66, w, h * 0.12)
 
       ctx.save()
       ctx.translate(w / 2, h / 2)
@@ -798,6 +898,8 @@ export default function PlatformerCanvas({
       ctx.translate(-camX, -camY)
 
       drawGround()
+      drawFloorDetail()
+      drawWallTorches()
       drawFlagPole(checkpointRef.current, level.laneMaxY, '#4C6B8A', '')
       drawFlagPole(level.goal.x, level.goal.y, '#C9A227', 'META')
 

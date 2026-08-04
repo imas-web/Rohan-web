@@ -80,31 +80,49 @@ export const PLATFORMER_LEVEL: PlatformerLevel = {
     { defId: 'berserker_uruk', x: 3600, y: GY - 30, minX: 3540, maxX: 3680 },
     { defId: 'orco_guerrero', x: 3750, y: GY + 30, minX: 3690, maxX: 3830 },
   ],
-  // cada cofre "escondido" tiene su hueco correspondiente en la misma x, para
-  // que se vea claramente la abertura en la pared (el camino obvio hacia él)
+  // muchos callejones sin salida: cada uno tiene su hueco correspondiente en
+  // la pared en la misma x (el camino obvio hacia él) y termina en un cofre —
+  // hay que abandonar el camino recto y después volver sobre tus pasos.
   alcoves: [
+    { x: 180, halfWidth: 55, side: 'up', depth: 100 },
     { x: 350, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
+    { x: 650, halfWidth: 65, side: 'down', depth: 130 },
     { x: 900, halfWidth: ALCOVE_HALF_WIDTH, side: 'down', depth: ALCOVE_DEPTH },
+    { x: 1150, halfWidth: 55, side: 'up', depth: 110 },
     { x: 1450, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
+    { x: 1750, halfWidth: 70, side: 'down', depth: 150 },
     { x: 2000, halfWidth: ALCOVE_HALF_WIDTH, side: 'down', depth: ALCOVE_DEPTH },
+    { x: 2220, halfWidth: 55, side: 'up', depth: 110 },
     { x: 2550, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
+    { x: 2750, halfWidth: 65, side: 'down', depth: 130 },
     { x: 3100, halfWidth: ALCOVE_HALF_WIDTH, side: 'down', depth: ALCOVE_DEPTH },
+    { x: 3450, halfWidth: 60, side: 'up', depth: 120 },
     { x: 3650, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
+    { x: 3950, halfWidth: 70, side: 'down', depth: 140 },
   ],
   // derrumbes que cortan el carril principal: para pasar hay que meterse en
   // el hueco lateral (más difícil todavía si hay un orco cerca vigilándolo)
   blockades: [
     { x: 1300, halfWidth: 50, side: 'down', depth: 110 },
+    { x: 2400, halfWidth: 45, side: 'down', depth: 110 },
     { x: 3250, halfWidth: 50, side: 'up', depth: 110 },
   ],
   chests: [
+    { x: 180, y: GY - LANE_HALF - 100 + 20, gold: 15 },
     { x: 350, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 20 },
+    { x: 650, y: GY + LANE_HALF + 130 - 20, gold: 25 },
     { x: 900, y: GY + LANE_HALF + ALCOVE_DEPTH - 20, gold: 20 },
+    { x: 1150, y: GY - LANE_HALF - 110 + 20, gold: 25 },
     { x: 1450, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 25 },
+    { x: 1750, y: GY + LANE_HALF + 150 - 20, gold: 35 },
     { x: 2000, y: GY + LANE_HALF + ALCOVE_DEPTH - 20, gold: 20 },
+    { x: 2220, y: GY - LANE_HALF - 110 + 20, gold: 25 },
     { x: 2550, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 25 },
+    { x: 2750, y: GY + LANE_HALF + 130 - 20, gold: 30 },
     { x: 3100, y: GY + LANE_HALF + ALCOVE_DEPTH - 20, gold: 25 },
+    { x: 3450, y: GY - LANE_HALF - 120 + 20, gold: 30 },
     { x: 3650, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 30 },
+    { x: 3950, y: GY + LANE_HALF + 140 - 20, gold: 35 },
   ],
   goal: { x: 4130, y: GY },
 }

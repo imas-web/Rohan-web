@@ -1203,44 +1203,92 @@ export default function GameCanvas({
       ctx.fill()
     }
 
+    function nearCastle(x: number, y: number, margin: number) {
+      return Math.abs(x - CASTLE_CX) < CASTLE_R_OUT + margin && Math.abs(y - CASTLE_CY) < CASTLE_R_OUT + margin
+    }
+
+    function drawRiverBand(riverY: number, riverH: number) {
+      const grad = ctx.createLinearGradient(0, riverY, 0, riverY + riverH)
+      grad.addColorStop(0, 'rgba(79, 140, 158, 0.55)')
+      grad.addColorStop(1, 'rgba(41, 84, 97, 0.55)')
+      ctx.fillStyle = grad
+      ctx.fillRect(0, riverY, WORLD_W, riverH)
+      ctx.strokeStyle = 'rgba(200, 230, 225, 0.25)'
+      ctx.lineWidth = 2
+      for (let x = 0; x < WORLD_W; x += 60) {
+        const wobble = Math.sin(x * 0.05 + performance.now() / 900) * 6
+        ctx.beginPath()
+        ctx.moveTo(x, riverY + riverH * 0.5 + wobble)
+        ctx.lineTo(x + 34, riverY + riverH * 0.5 - wobble)
+        ctx.stroke()
+      }
+      // piedras para cruzar el vado
+      ctx.fillStyle = 'rgba(120, 112, 98, 0.7)'
+      for (let x = 100; x < WORLD_W; x += 340) {
+        ctx.beginPath()
+        ctx.ellipse(x, riverY + riverH / 2, 16, 10, 0, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.fillStyle = '#3C5A3E'
+      for (let x = 20; x < WORLD_W; x += 130) {
+        const jitter = (x * 53) % 40
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath()
+          ctx.moveTo(x + jitter + i * 5, riverY + riverH + 4)
+          ctx.lineTo(x + jitter + i * 5 - 3, riverY + riverH - 14)
+          ctx.lineTo(x + jitter + i * 5 + 3, riverY + riverH - 14)
+          ctx.closePath()
+          ctx.fill()
+        }
+      }
+    }
+
     function drawSceneDecor() {
       if (mission.id === 'mision_exterminio') {
-        // el Vado: un río corre a lo largo del borde norte, con juncos
-        const riverY = 90
-        const riverH = 70
-        const grad = ctx.createLinearGradient(0, riverY, 0, riverY + riverH)
-        grad.addColorStop(0, 'rgba(79, 140, 158, 0.55)')
-        grad.addColorStop(1, 'rgba(41, 84, 97, 0.55)')
-        ctx.fillStyle = grad
-        ctx.fillRect(0, riverY, WORLD_W, riverH)
-        ctx.strokeStyle = 'rgba(200, 230, 225, 0.25)'
-        ctx.lineWidth = 2
-        for (let x = 0; x < WORLD_W; x += 60) {
-          const wobble = Math.sin(x * 0.05 + performance.now() / 900) * 6
+        // el Vado: dos brazos de río (norte y sur) con juncos, piedras para
+        // cruzar, nenúfares y luciérnagas dispersas por el pastizal
+        drawRiverBand(90, 70)
+        drawRiverBand(WORLD_H - 160, 70)
+
+        ctx.fillStyle = 'rgba(90, 130, 110, 0.35)'
+        for (let i = 0; i < 24; i++) {
+          const rx = (i * 271 + 40) % WORLD_W
+          const ry = (i * 397 + 220) % (WORLD_H - 440) + 220
+          if (nearCastle(rx, ry, 50)) continue
           ctx.beginPath()
-          ctx.moveTo(x, riverY + riverH * 0.5 + wobble)
-          ctx.lineTo(x + 34, riverY + riverH * 0.5 - wobble)
-          ctx.stroke()
+          ctx.ellipse(rx, ry, 14, 8, 0.3, 0, Math.PI * 2)
+          ctx.fill()
         }
-        ctx.fillStyle = '#3C5A3E'
-        for (let x = 20; x < WORLD_W; x += 130) {
-          const jitter = (x * 53) % 40
-          for (let i = 0; i < 3; i++) {
-            ctx.beginPath()
-            ctx.moveTo(x + jitter + i * 5, riverY + riverH + 4)
-            ctx.lineTo(x + jitter + i * 5 - 3, riverY + riverH - 14)
-            ctx.lineTo(x + jitter + i * 5 + 3, riverY + riverH - 14)
-            ctx.closePath()
-            ctx.fill()
-          }
+        ctx.fillStyle = 'rgba(150, 160, 140, 0.4)'
+        for (let i = 0; i < 16; i++) {
+          const rx = (i * 431 + 90) % WORLD_W
+          const ry = (i * 313 + 260) % (WORLD_H - 500) + 250
+          if (nearCastle(rx, ry, 60)) continue
+          ctx.beginPath()
+          ctx.arc(rx, ry, 10 + (i % 3) * 4, 0, Math.PI * 2)
+          ctx.fill()
         }
+        const t = performance.now() / 1000
+        ctx.fillStyle = '#C9E4A8'
+        for (let i = 0; i < 22; i++) {
+          const fx = (i * 191 + 60) % WORLD_W
+          const fy = (i * 277 + 200) % (WORLD_H - 400) + 200
+          if (nearCastle(fx, fy, 40)) continue
+          const twinkle = 0.25 + 0.35 * Math.abs(Math.sin(t * 1.4 + i))
+          ctx.globalAlpha = twinkle
+          ctx.beginPath()
+          ctx.arc(fx + Math.sin(t * 0.6 + i) * 12, fy + Math.cos(t * 0.5 + i) * 10, 2.2, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        ctx.globalAlpha = 1
       } else if (mission.id === 'defensa_muro') {
-        // El Muro del Abismo bajo asedio: escombros y braseros encendidos
+        // El Muro del Abismo bajo asedio: escombros, tierra agrietada,
+        // flechas clavadas, escaleras de asedio y braseros con humo
         ctx.fillStyle = 'rgba(70, 55, 42, 0.6)'
-        for (let i = 0; i < 26; i++) {
+        for (let i = 0; i < 42; i++) {
           const rx = (i * 337) % WORLD_W
           const ry = (i * 611) % WORLD_H
-          if (Math.abs(rx - CASTLE_CX) < CASTLE_R_OUT + 60 && Math.abs(ry - CASTLE_CY) < CASTLE_R_OUT + 60) continue
+          if (nearCastle(rx, ry, 60)) continue
           ctx.beginPath()
           ctx.moveTo(rx, ry)
           ctx.lineTo(rx + 22, ry + 6)
@@ -1248,11 +1296,62 @@ export default function GameCanvas({
           ctx.closePath()
           ctx.fill()
         }
+        ctx.strokeStyle = 'rgba(30, 22, 16, 0.35)'
+        ctx.lineWidth = 2
+        for (let i = 0; i < 20; i++) {
+          const cx = (i * 449 + 30) % WORLD_W
+          const cy = (i * 233 + 15) % WORLD_H
+          if (nearCastle(cx, cy, 50)) continue
+          ctx.beginPath()
+          ctx.moveTo(cx - 12, cy)
+          ctx.lineTo(cx + 4, cy - 6)
+          ctx.lineTo(cx + 16, cy + 8)
+          ctx.stroke()
+        }
+        ctx.strokeStyle = '#8A7A5C'
+        ctx.lineWidth = 2
+        for (let i = 0; i < 16; i++) {
+          const ax = (i * 523 + 20) % WORLD_W
+          const ay = (i * 349 + 10) % WORLD_H
+          if (nearCastle(ax, ay, 45)) continue
+          ctx.beginPath()
+          ctx.moveTo(ax, ay + 14)
+          ctx.lineTo(ax + 4, ay - 6)
+          ctx.stroke()
+          ctx.fillStyle = '#2B2118'
+          ctx.beginPath()
+          ctx.moveTo(ax + 4, ay - 6)
+          ctx.lineTo(ax - 2, ay - 4)
+          ctx.lineTo(ax + 2, ay - 10)
+          ctx.closePath()
+          ctx.fill()
+        }
+        // escaleras de asedio apoyadas contra los muros exteriores
+        ctx.strokeStyle = '#5E4A36'
+        ctx.lineWidth = 4
+        const ladderSpots = [
+          { x: CASTLE_CX - CASTLE_R_OUT - 60, y: CASTLE_CY - 120 },
+          { x: CASTLE_CX + CASTLE_R_OUT + 60, y: CASTLE_CY + 90 },
+        ]
+        ladderSpots.forEach((s) => {
+          for (let r = 0; r < 6; r++) {
+            ctx.beginPath()
+            ctx.moveTo(s.x - 14, s.y + r * 16)
+            ctx.lineTo(s.x + 14, s.y + r * 16 - 4)
+            ctx.stroke()
+          }
+          ctx.beginPath()
+          ctx.moveTo(s.x - 14, s.y)
+          ctx.lineTo(s.x - 10, s.y + 96)
+          ctx.moveTo(s.x + 14, s.y - 12)
+          ctx.lineTo(s.x + 18, s.y + 84)
+          ctx.stroke()
+        })
         const flicker = 0.5 + Math.sin(performance.now() / 140) * 0.15
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 10; i++) {
           const fx = (i * 271) % WORLD_W
           const fy = (i * 419) % WORLD_H
-          if (Math.abs(fx - CASTLE_CX) < CASTLE_R_OUT + 40 && Math.abs(fy - CASTLE_CY) < CASTLE_R_OUT + 40) continue
+          if (nearCastle(fx, fy, 40)) continue
           const glow = ctx.createRadialGradient(fx, fy, 2, fx, fy, 46)
           glow.addColorStop(0, `rgba(217, 103, 63, ${flicker})`)
           glow.addColorStop(1, 'rgba(217, 103, 63, 0)')
@@ -1260,16 +1359,25 @@ export default function GameCanvas({
           ctx.fillRect(fx - 46, fy - 46, 92, 92)
           ctx.fillStyle = '#2B2118'
           ctx.fillRect(fx - 4, fy - 6, 8, 14)
+          // humo que se eleva
+          const smokeT = (performance.now() / 1000 + i * 1.7) % 3
+          ctx.globalAlpha = Math.max(0, 0.3 - smokeT * 0.1)
+          ctx.beginPath()
+          ctx.arc(fx + Math.sin(i + smokeT) * 6, fy - 20 - smokeT * 30, 8 + smokeT * 6, 0, Math.PI * 2)
+          ctx.fillStyle = 'rgba(120, 110, 100, 1)'
+          ctx.fill()
+          ctx.globalAlpha = 1
         }
       } else if (mission.id === 'oleadas_cuerno') {
-        // El Cuerno de Helm: mazmorra fría, antorchas a lo largo del perímetro
+        // El Cuerno de Helm: mazmorra fría, antorchas densas, columnas de
+        // piedra, telarañas y polvo flotando en la penumbra
         const flicker = 0.55 + Math.sin(performance.now() / 160) * 0.2
         const positions: Vec2[] = []
-        for (let x = 60; x < WORLD_W; x += 220) {
+        for (let x = 50; x < WORLD_W; x += 180) {
           positions.push({ x, y: 30 })
           positions.push({ x, y: WORLD_H - 30 })
         }
-        for (let y = 60; y < WORLD_H; y += 220) {
+        for (let y = 50; y < WORLD_H; y += 180) {
           positions.push({ x: 30, y })
           positions.push({ x: WORLD_W - 30, y })
         }
@@ -1286,6 +1394,59 @@ export default function GameCanvas({
           ctx.arc(p.x, p.y - 14, 4, 0, Math.PI * 2)
           ctx.fill()
         })
+        // columnas de piedra dispersas por el patio exterior
+        ctx.fillStyle = '#413E52'
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'
+        ctx.lineWidth = 2
+        for (let i = 0; i < 12; i++) {
+          const px = (i * 397 + 70) % WORLD_W
+          const py = (i * 281 + 90) % WORLD_H
+          if (nearCastle(px, py, 55)) continue
+          ctx.beginPath()
+          ctx.arc(px, py, 18, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.arc(px, py, 9, 0, Math.PI * 2)
+          ctx.fillStyle = '#2C2938'
+          ctx.fill()
+          ctx.fillStyle = '#413E52'
+        }
+        // telarañas en las esquinas del mundo
+        ctx.strokeStyle = 'rgba(200, 200, 220, 0.18)'
+        ctx.lineWidth = 1
+        const corners: [number, number, number, number][] = [
+          [0, 0, 1, 1],
+          [WORLD_W, 0, -1, 1],
+          [0, WORLD_H, 1, -1],
+          [WORLD_W, WORLD_H, -1, -1],
+        ]
+        corners.forEach(([cx, cy, dx, dy]) => {
+          for (let r = 20; r <= 80; r += 20) {
+            ctx.beginPath()
+            ctx.arc(cx, cy, r, dx > 0 ? 0 : Math.PI / 2, dx > 0 ? Math.PI / 2 : Math.PI, dy < 0)
+            ctx.stroke()
+          }
+          for (let a = 0; a <= 90; a += 30) {
+            const rad = (a * Math.PI) / 180
+            ctx.beginPath()
+            ctx.moveTo(cx, cy)
+            ctx.lineTo(cx + dx * Math.cos(rad) * 80, cy + dy * Math.sin(rad) * 80)
+            ctx.stroke()
+          }
+        })
+        // polvo flotando en la penumbra
+        const t = performance.now() / 1000
+        ctx.fillStyle = 'rgba(200, 180, 232, 0.25)'
+        for (let i = 0; i < 30; i++) {
+          const dx0 = (i * 233 + 50) % WORLD_W
+          const dy0 = (i * 179 + 50) % WORLD_H
+          const dx = dx0 + Math.sin(t * 0.3 + i) * 20
+          const dy = dy0 + Math.cos(t * 0.25 + i) * 20
+          ctx.beginPath()
+          ctx.arc(dx, dy, 1.6, 0, Math.PI * 2)
+          ctx.fill()
+        }
       }
     }
 
