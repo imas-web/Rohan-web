@@ -668,19 +668,21 @@ canvas {
   background: rgba(232, 223, 200, 0.25);
 }
 
-.jump-btn {
-  width: 74px;
-  height: 74px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, var(--hp-green), #3E8465);
-  border: 2px solid rgba(232, 223, 200, 0.5);
-  color: #0B0C10;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 11px;
-  pointer-events: auto;
-  box-shadow: 0 8px 22px rgba(127, 209, 174, 0.4);
-  align-self: flex-end;
+.dpad-4way {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.dpad-mid-row {
+  display: flex;
+  gap: 46px;
+}
+
+.dpad-up,
+.dpad-down {
+  align-self: center;
 }
 
 .joystick-base {

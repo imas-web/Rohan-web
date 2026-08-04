@@ -7,10 +7,8 @@ import { drawBar, drawHumanoid } from './render'
 import { drawSprite, preloadSprites, type SpriteKey } from './sprites'
 import PlatformerControls from '../ui/PlatformerControls'
 
-const GRAVITY = 1900
-const JUMP_VELOCITY = -720
 const MOVE_SPEED = 230
-const PLAYER_HALF_W = 14
+const MOVE_SPEED_Y = 170
 const CONTACT_RANGE = 30
 const CONTACT_COOLDOWN = 0.8
 const INVULN_DURATION = 1.4
@@ -24,7 +22,7 @@ interface LocalPlatformer {
   name: string
   color: string
   x: number
-  y: number // posición de los pies
+  y: number
   vx: number
   vy: number
   facing: 1 | -1
@@ -37,7 +35,6 @@ interface LocalPlatformer {
   armorId: string
   attackCooldownLeft: number
   attackAnim: number
-  grounded: boolean
   invulnLeft: number
   alive: boolean
 }
@@ -121,7 +118,7 @@ export default function PlatformerCanvas({
   const materialsEarnedRef = useRef(0)
   const xpEarnedRef = useRef(0)
   const livesRef = useRef(START_LIVES)
-  const checkpointRef = useRef<Vec2>({ ...level.startPos })
+  const checkpointRef = useRef<number>(level.startPos.x)
   const finishedRef = useRef(false)
 
   const localRef = useRef<LocalPlatformer>({
@@ -142,7 +139,6 @@ export default function PlatformerCanvas({
     armorId,
     attackCooldownLeft: 0,
     attackAnim: 0,
-    grounded: false,
     invulnLeft: 0,
     alive: true,
   })
@@ -155,7 +151,8 @@ export default function PlatformerCanvas({
 
   const leftHeldRef = useRef(false)
   const rightHeldRef = useRef(false)
-  const jumpQueuedRef = useRef(false)
+  const upHeldRef = useRef(false)
+  const downHeldRef = useRef(false)
   const attackHeldRef = useRef(false)
 
   const camXRef = useRef(level.startPos.x)
@@ -209,8 +206,8 @@ export default function PlatformerCanvas({
       lp.alive = false
       return
     }
-    lp.x = checkpointRef.current.x
-    lp.y = checkpointRef.current.y
+    lp.x = checkpointRef.current
+    lp.y = level.goal.y
     lp.vx = 0
     lp.vy = 0
     lp.hp = lp.maxHp
@@ -283,14 +280,17 @@ export default function PlatformerCanvas({
       const k = e.key.toLowerCase()
       if (k === 'a' || k === 'arrowleft') leftHeldRef.current = true
       if (k === 'd' || k === 'arrowright') rightHeldRef.current = true
-      if (k === 'w' || k === 'arrowup' || k === ' ') jumpQueuedRef.current = true
-      if (k === 'f') attackHeldRef.current = true
+      if (k === 'w' || k === 'arrowup') upHeldRef.current = true
+      if (k === 's' || k === 'arrowdown') downHeldRef.current = true
+      if (k === 'f' || k === ' ') attackHeldRef.current = true
     }
     function onKeyUp(e: KeyboardEvent) {
       const k = e.key.toLowerCase()
       if (k === 'a' || k === 'arrowleft') leftHeldRef.current = false
       if (k === 'd' || k === 'arrowright') rightHeldRef.current = false
-      if (k === 'f') attackHeldRef.current = false
+      if (k === 'w' || k === 'arrowup') upHeldRef.current = false
+      if (k === 's' || k === 'arrowdown') downHeldRef.current = false
+      if (k === 'f' || k === ' ') attackHeldRef.current = false
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
@@ -322,29 +322,11 @@ export default function PlatformerCanvas({
       if (moveDir !== 0) lp.facing = moveDir > 0 ? 1 : -1
       lp.x = Math.min(level.width - 20, Math.max(20, lp.x + lp.vx * dt))
 
-      if (jumpQueuedRef.current) {
-        jumpQueuedRef.current = false
-        if (lp.grounded) {
-          lp.vy = JUMP_VELOCITY
-          lp.grounded = false
-        }
-      }
-
-      lp.vy += GRAVITY * dt
-      const prevFeetY = lp.y
-      const newY = lp.y + lp.vy * dt
-      let grounded = false
-      let landedY = newY
-      for (const plat of level.platforms) {
-        const withinX = lp.x + PLAYER_HALF_W > plat.x && lp.x - PLAYER_HALF_W < plat.x + plat.w
-        if (withinX && lp.vy >= 0 && prevFeetY <= plat.y + 1 && newY >= plat.y) {
-          landedY = plat.y
-          grounded = true
-        }
-      }
-      lp.y = landedY
-      lp.grounded = grounded
-      if (grounded) lp.vy = 0
+      let moveDirY = 0
+      if (upHeldRef.current) moveDirY -= 1
+      if (downHeldRef.current) moveDirY += 1
+      lp.vy = moveDirY * MOVE_SPEED_Y
+      lp.y = Math.min(level.laneMaxY, Math.max(level.laneMinY, lp.y + lp.vy * dt))
 
       if (lp.attackCooldownLeft > 0) lp.attackCooldownLeft -= dt
       if (lp.attackAnim > 0) lp.attackAnim -= dt
@@ -352,10 +334,8 @@ export default function PlatformerCanvas({
 
       if (attackHeldRef.current) tryAttack()
 
-      if (lp.y > level.fallDeathY) respawnLocal()
-
-      for (const cp of level.checkpoints) {
-        if (lp.x >= cp.x && cp.x > checkpointRef.current.x) checkpointRef.current = { ...cp }
+      for (const cpX of level.checkpoints) {
+        if (lp.x >= cpX && cpX > checkpointRef.current) checkpointRef.current = cpX
       }
 
       if (lp.x >= level.goal.x - GOAL_MARGIN) {
@@ -451,19 +431,16 @@ export default function PlatformerCanvas({
         f.pos = { x: f.pos.x, y: f.pos.y + f.vy * dt }
       })
 
-      // cámara: sigue al jugador que va más adelante (líder), en x e y
+      // cámara: sigue en X al jugador que va más adelante (líder); en Y queda
+      // fija en el centro del carril, como en un beat 'em up clásico.
       const allPlayers = allPlayerPositions()
       let leaderX = lp.x
-      let leaderY = lp.y
       allPlayers.forEach((p) => {
-        if (p.pos.x > leaderX) {
-          leaderX = p.pos.x
-          leaderY = p.pos.y
-        }
+        if (p.pos.x > leaderX) leaderX = p.pos.x
       })
       const w = canvas.width
       camXRef.current = Math.min(level.width - w / 2, Math.max(w / 2, leaderX))
-      camYRef.current += (leaderY - 90 - camYRef.current) * Math.min(1, dt * 3)
+      camYRef.current = level.goal.y
 
       render(dt)
 
@@ -491,13 +468,36 @@ export default function PlatformerCanvas({
     }
 
     function drawGround() {
+      const wallH = 240
+      // paredes de roca que enmarcan el carril, estilo callejón de arcade
+      ctx.fillStyle = '#241C14'
+      ctx.fillRect(0, level.laneMinY - wallH, level.width, wallH)
+      ctx.fillRect(0, level.laneMaxY, level.width, wallH)
+      ctx.fillStyle = 'rgba(90, 80, 60, 0.5)'
+      for (let x = 0; x < level.width; x += 90) {
+        const jitter = (x * 37) % 30
+        ctx.beginPath()
+        ctx.arc(x + jitter, level.laneMinY - wallH * 0.35, 26, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(x + 45 - jitter, level.laneMaxY + wallH * 0.35, 26, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      // carril caminable
       ctx.fillStyle = '#3A3226'
-      level.platforms.forEach((plat) => {
-        ctx.fillRect(plat.x, plat.y, plat.w, plat.h)
-        ctx.fillStyle = '#5C6B3E'
-        ctx.fillRect(plat.x, plat.y - 6, plat.w, 8)
-        ctx.fillStyle = '#3A3226'
-      })
+      ctx.fillRect(0, level.laneMinY, level.width, level.laneMaxY - level.laneMinY)
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'
+      ctx.lineWidth = 6
+      ctx.beginPath()
+      ctx.moveTo(0, level.laneMinY)
+      ctx.lineTo(level.width, level.laneMinY)
+      ctx.moveTo(0, level.laneMaxY)
+      ctx.lineTo(level.width, level.laneMaxY)
+      ctx.stroke()
+      ctx.fillStyle = 'rgba(0,0,0,0.12)'
+      for (let x = 0; x < level.width; x += 64) {
+        ctx.fillRect(x, level.laneMinY, 2, level.laneMaxY - level.laneMinY)
+      }
     }
 
     function drawFlagPole(x: number, y: number, color: string, label: string) {
@@ -548,7 +548,7 @@ export default function PlatformerCanvas({
       ctx.translate(w / 2 - camX, h / 2 - camY)
 
       drawGround()
-      drawFlagPole(checkpointRef.current.x, checkpointRef.current.y, '#4C6B8A', '')
+      drawFlagPole(checkpointRef.current, level.laneMaxY, '#4C6B8A', '')
       drawFlagPole(level.goal.x, level.goal.y, '#C9A227', 'META')
 
       // enemigos
@@ -723,7 +723,7 @@ export default function PlatformerCanvas({
             </div>
           </div>
           <div className="hud-controls-hint">
-            Mové con <strong>A/D</strong>, saltá con <strong>W/Espacio</strong>, atacá con <strong>F</strong> — o los botones en pantalla.
+            Mové con <strong>A/D</strong>, acercate o alejate con <strong>W/S</strong>, atacá con <strong>F</strong> — o los botones en pantalla.
           </div>
         </div>
       )}
@@ -732,7 +732,10 @@ export default function PlatformerCanvas({
         onLeftEnd={() => { leftHeldRef.current = false }}
         onRightStart={() => { rightHeldRef.current = true }}
         onRightEnd={() => { rightHeldRef.current = false }}
-        onJump={() => { jumpQueuedRef.current = true }}
+        onUpStart={() => { upHeldRef.current = true }}
+        onUpEnd={() => { upHeldRef.current = false }}
+        onDownStart={() => { downHeldRef.current = true }}
+        onDownEnd={() => { downHeldRef.current = false }}
         onAttackStart={() => { attackHeldRef.current = true }}
         onAttackEnd={() => { attackHeldRef.current = false }}
       />

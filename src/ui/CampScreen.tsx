@@ -165,7 +165,7 @@ export default function CampScreen({
                   : m.mode === 'defensa'
                   ? 'Defender base'
                   : m.mode === 'plataformas'
-                  ? 'Plataformas'
+                  ? 'Desfiladero'
                   : 'Misión'}
               </span>
               <h3>{m.title}</h3>
