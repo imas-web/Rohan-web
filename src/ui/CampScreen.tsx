@@ -1,15 +1,17 @@
 import { useEffect, useState, type MutableRefObject } from 'react'
 import {
-  ARMORS,
   MISSIONS,
   RARITY_COLOR,
-  RARITY_COST,
-  RARITY_MIN_LEVEL,
   ULTIMATE_MAX_RANK,
   ULTIMATE_RANK_COST,
-  WEAPONS,
+  abilitiesForClass,
+  armorIdForLevel,
+  getAbility,
+  getArmor,
   getClass,
+  getWeapon,
   skillPointsForLevel,
+  weaponIdForClassLevel,
   xpToNextLevel,
 } from '../game/data'
 import type { MissionDef } from '../game/types'
@@ -19,15 +21,16 @@ export interface Progress {
   level: number
   xp: number
   materials: number
-  weaponId: string
-  armorId: string
   ultimateRank: number
+  activeAbilityId: string
+  unlockedAbilityIds: string[]
 }
 
 export default function CampScreen({
   progress,
   classId,
-  onEquip,
+  onUnlockAbility,
+  onSelectAbility,
   onUpgradeUltimate,
   room,
   listenersRef,
@@ -36,7 +39,8 @@ export default function CampScreen({
 }: {
   progress: Progress
   classId: string
-  onEquip: (weaponId: string, armorId: string, materialsSpent: number) => void
+  onUnlockAbility: (abilityId: string, cost: number) => void
+  onSelectAbility: (abilityId: string) => void
   onUpgradeUltimate: () => void
   room: MultiplayerRoom | null
   listenersRef: MutableRefObject<Listeners>
@@ -44,6 +48,9 @@ export default function CampScreen({
   onBack: () => void
 }) {
   const cls = getClass(classId)
+  const weapon = getWeapon(weaponIdForClassLevel(classId, progress.level))
+  const armor = getArmor(armorIdForLevel(progress.level))
+  const activeAbility = getAbility(progress.activeAbilityId)
   const totalSkillPoints = skillPointsForLevel(progress.level)
   const nextRankCost = ULTIMATE_RANK_COST[progress.ultimateRank]
   const canUpgradeUltimate = progress.ultimateRank < ULTIMATE_MAX_RANK && totalSkillPoints >= nextRankCost
@@ -63,20 +70,6 @@ export default function CampScreen({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room])
-
-  function canAfford(rarity: string) {
-    return progress.materials >= RARITY_COST[rarity] && progress.level >= RARITY_MIN_LEVEL[rarity]
-  }
-
-  function buyWeapon(id: string, rarity: string, cost: number) {
-    if (!canAfford(rarity)) return
-    onEquip(id, progress.armorId, cost)
-  }
-
-  function buyArmor(id: string, rarity: string, cost: number) {
-    if (!canAfford(rarity)) return
-    onEquip(progress.weaponId, id, cost)
-  }
 
   function startMission(mission: MissionDef) {
     if (room) {
@@ -98,7 +91,7 @@ export default function CampScreen({
           </div>
           <p className="materials-count">◆ {progress.materials} materiales</p>
         </div>
-        <button className="btn-ghost" onClick={onBack}>Cambiar nombre</button>
+        <button className="btn-ghost" onClick={onBack}>Cambiar nombre o clase</button>
       </div>
 
       {room && (
@@ -113,9 +106,62 @@ export default function CampScreen({
         </div>
       )}
 
+      <section className="camp-section">
+        <h2>Tu equipo — {cls.name}</h2>
+        <p className="hint">El arma y la armadura de tu clase mejoran solas al subir de nivel.</p>
+        <div className="item-grid">
+          <div className="item-card equipped" style={{ borderColor: RARITY_COLOR[weapon.rarity] }}>
+            <span className="item-name">{weapon.name}</span>
+            <span className="item-rarity" style={{ color: RARITY_COLOR[weapon.rarity] }}>{weapon.rarity}</span>
+            <span className="item-stats">Daño {weapon.damage} · Vel. {weapon.attackSpeed}/s · Crít {Math.round(weapon.critChance * 100)}%</span>
+          </div>
+          <div className="item-card equipped" style={{ borderColor: RARITY_COLOR[armor.rarity] }}>
+            <span className="item-name">{armor.name}</span>
+            <span className="item-rarity" style={{ color: RARITY_COLOR[armor.rarity] }}>{armor.rarity}</span>
+            <span className="item-stats">Def. {armor.defense} · +{armor.hpBonus} HP</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="camp-section">
+        <h2>Habilidades — {cls.name}</h2>
+        <p className="hint">Desbloqueá las 4 con nivel y materiales, pero solo una puede estar activa a la vez.</p>
+        <div className="item-grid">
+          {abilitiesForClass(classId).map((ab) => {
+            const unlocked = progress.unlockedAbilityIds.includes(ab.id)
+            const isActive = progress.activeAbilityId === ab.id
+            const levelOk = progress.level >= ab.unlockLevel
+            const canUnlock = !unlocked && levelOk && progress.materials >= ab.unlockCost
+            return (
+              <button
+                key={ab.id}
+                className={`item-card ${isActive ? 'equipped' : ''}`}
+                style={{ borderColor: ab.color }}
+                disabled={unlocked ? isActive : !canUnlock}
+                onClick={() => {
+                  if (unlocked) onSelectAbility(ab.id)
+                  else onUnlockAbility(ab.id, ab.unlockCost)
+                }}
+              >
+                <span className="item-name">{ab.name}</span>
+                <span className="item-rarity" style={{ color: ab.color }}>{ab.archetype}</span>
+                <span className="item-stats">{ab.description}</span>
+                {!unlocked && (
+                  <span className="item-cost">
+                    {ab.unlockCost === 0 ? 'Gratis' : `◆ ${ab.unlockCost}`}
+                    {!levelOk ? ` · Nv. ${ab.unlockLevel}+` : ''}
+                  </span>
+                )}
+                {unlocked && <span className="item-cost">{isActive ? 'Activa' : 'Elegir'}</span>}
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
       <section className="camp-section ultimate-section">
-        <h2>Habilidad — {cls.ultimateName}</h2>
-        <p className="hint">{cls.description}</p>
+        <h2>Rango de {activeAbility.name}</h2>
+        <p className="hint">{activeAbility.description}</p>
         <div className="ultimate-rank-row">
           {Array.from({ length: ULTIMATE_MAX_RANK }, (_, i) => (
             <span key={i} className={`rank-pip ${i < progress.ultimateRank ? 'filled' : ''}`} style={i < progress.ultimateRank ? { background: cls.color, borderColor: cls.color } : undefined} />
@@ -124,75 +170,13 @@ export default function CampScreen({
         </div>
         <p className="hint">
           {progress.ultimateRank >= ULTIMATE_MAX_RANK
-            ? 'Habilidad al máximo — más área, más duración y menos cooldown.'
+            ? 'Habilidad al máximo — más área/duración y menos cooldown.'
             : `Punto de habilidad: ${totalSkillPoints} disponibles (ganás 1 por nivel) · próximo rango cuesta ${nextRankCost}.`}
         </p>
         <button className="btn-secondary" disabled={!canUpgradeUltimate} onClick={onUpgradeUltimate}>
           {progress.ultimateRank >= ULTIMATE_MAX_RANK ? 'Habilidad al máximo' : 'Mejorar habilidad'}
         </button>
       </section>
-
-      <div className="camp-columns">
-        <section className="camp-section">
-          <h2>Armas</h2>
-          <div className="item-grid">
-            {WEAPONS.map((w) => {
-              const equipped = w.id === progress.weaponId
-              const affordable = canAfford(w.rarity)
-              return (
-                <button
-                  key={w.id}
-                  className={`item-card ${equipped ? 'equipped' : ''}`}
-                  style={{ borderColor: RARITY_COLOR[w.rarity] }}
-                  disabled={!equipped && !affordable}
-                  onClick={() => (equipped ? null : buyWeapon(w.id, w.rarity, RARITY_COST[w.rarity]))}
-                >
-                  <span className="item-name">{w.name}</span>
-                  <span className="item-rarity" style={{ color: RARITY_COLOR[w.rarity] }}>{w.rarity}</span>
-                  <span className="item-stats">Daño {w.damage} · Vel. {w.attackSpeed}/s · Crít {Math.round(w.critChance * 100)}%</span>
-                  {!equipped && (
-                    <span className="item-cost">
-                      {RARITY_COST[w.rarity] === 0 ? 'Gratis' : `◆ ${RARITY_COST[w.rarity]}`}
-                      {progress.level < RARITY_MIN_LEVEL[w.rarity] ? ` · Nv. ${RARITY_MIN_LEVEL[w.rarity]}+` : ''}
-                    </span>
-                  )}
-                  {equipped && <span className="item-cost">Equipado</span>}
-                </button>
-              )
-            })}
-          </div>
-        </section>
-
-        <section className="camp-section">
-          <h2>Armaduras</h2>
-          <div className="item-grid">
-            {ARMORS.map((a) => {
-              const equipped = a.id === progress.armorId
-              const affordable = canAfford(a.rarity)
-              return (
-                <button
-                  key={a.id}
-                  className={`item-card ${equipped ? 'equipped' : ''}`}
-                  style={{ borderColor: RARITY_COLOR[a.rarity] }}
-                  disabled={!equipped && !affordable}
-                  onClick={() => (equipped ? null : buyArmor(a.id, a.rarity, RARITY_COST[a.rarity]))}
-                >
-                  <span className="item-name">{a.name}</span>
-                  <span className="item-rarity" style={{ color: RARITY_COLOR[a.rarity] }}>{a.rarity}</span>
-                  <span className="item-stats">Def. {a.defense} · +{a.hpBonus} HP</span>
-                  {!equipped && (
-                    <span className="item-cost">
-                      {RARITY_COST[a.rarity] === 0 ? 'Gratis' : `◆ ${RARITY_COST[a.rarity]}`}
-                      {progress.level < RARITY_MIN_LEVEL[a.rarity] ? ` · Nv. ${RARITY_MIN_LEVEL[a.rarity]}+` : ''}
-                    </span>
-                  )}
-                  {equipped && <span className="item-cost">Equipado</span>}
-                </button>
-              )
-            })}
-          </div>
-        </section>
-      </div>
 
       <section className="camp-section">
         <h2>Misiones</h2>

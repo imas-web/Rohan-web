@@ -5,6 +5,7 @@ import CampScreen, { type Progress } from './ui/CampScreen'
 import GameCanvas from './game/GameCanvas'
 import PlatformerCanvas from './game/PlatformerCanvas'
 import type { MissionDef } from './game/types'
+import { armorIdForLevel, defaultAbilityForClass, weaponIdForClassLevel } from './game/data'
 import { MultiplayerRoom, makePlayerId, type Listeners } from './supabase/multiplayer'
 
 type Screen = 'menu' | 'lobby' | 'camp' | 'game'
@@ -53,11 +54,18 @@ export default function App() {
           level: saved.level,
           xp: saved.xp,
           materials: saved.materials,
-          weaponId: saved.weaponId,
-          armorId: saved.armorId,
           ultimateRank: saved.ultimateRank ?? 1,
+          activeAbilityId: saved.activeAbilityId ?? defaultAbilityForClass(saved.classId ?? 'guerrero'),
+          unlockedAbilityIds: saved.unlockedAbilityIds ?? [defaultAbilityForClass(saved.classId ?? 'guerrero')],
         }
-      : { level: 1, xp: 0, materials: 0, weaponId: 'daga', armorId: 'ropa', ultimateRank: 1 }
+      : {
+          level: 1,
+          xp: 0,
+          materials: 0,
+          ultimateRank: 1,
+          activeAbilityId: defaultAbilityForClass('guerrero'),
+          unlockedAbilityIds: [defaultAbilityForClass('guerrero')],
+        }
   )
   const [room, setRoom] = useState<MultiplayerRoom | null>(null)
   const [mission, setMission] = useState<MissionDef | null>(null)
@@ -66,10 +74,21 @@ export default function App() {
     persistSave({ name, color, classId, ...progress })
   }, [name, color, classId, progress])
 
+  function applyClassChoice(cls: string) {
+    if (cls === classId) return
+    setClassId(cls)
+    setProgress((prev) => ({
+      ...prev,
+      activeAbilityId: defaultAbilityForClass(cls),
+      unlockedAbilityIds: [defaultAbilityForClass(cls)],
+      ultimateRank: 1,
+    }))
+  }
+
   function handleSolo(n: string, c: string, cls: string) {
     setName(n)
     setColor(c)
-    setClassId(cls)
+    applyClassChoice(cls)
     setRoom(null)
     setScreen('camp')
   }
@@ -77,12 +96,22 @@ export default function App() {
   function handleMultiplayer(n: string, c: string, cls: string) {
     setName(n)
     setColor(c)
-    setClassId(cls)
+    applyClassChoice(cls)
     setScreen('lobby')
   }
 
-  function handleEquip(weaponId: string, armorId: string, materialsSpent: number) {
-    setProgress((prev) => ({ ...prev, weaponId, armorId, materials: prev.materials - materialsSpent }))
+  function handleUnlockAbility(abilityId: string, cost: number) {
+    setProgress((prev) => {
+      if (prev.unlockedAbilityIds.includes(abilityId) || prev.materials < cost) return prev
+      return { ...prev, materials: prev.materials - cost, unlockedAbilityIds: [...prev.unlockedAbilityIds, abilityId] }
+    })
+  }
+
+  function handleSelectAbility(abilityId: string) {
+    setProgress((prev) => {
+      if (!prev.unlockedAbilityIds.includes(abilityId)) return prev
+      return { ...prev, activeAbilityId: abilityId, ultimateRank: 1 }
+    })
   }
 
   function handleUpgradeUltimate() {
@@ -103,6 +132,9 @@ export default function App() {
     }))
     setScreen('camp')
   }
+
+  const weaponId = weaponIdForClassLevel(classId, progress.level)
+  const armorId = armorIdForLevel(progress.level)
 
   return (
     <>
@@ -135,7 +167,8 @@ export default function App() {
         <CampScreen
           progress={progress}
           classId={classId}
-          onEquip={handleEquip}
+          onUnlockAbility={handleUnlockAbility}
+          onSelectAbility={handleSelectAbility}
           onUpgradeUltimate={handleUpgradeUltimate}
           room={room}
           listenersRef={listenersRef}
@@ -149,8 +182,8 @@ export default function App() {
           mission={mission}
           localName={name}
           localColor={color}
-          weaponId={progress.weaponId}
-          armorId={progress.armorId}
+          weaponId={weaponId}
+          armorId={armorId}
           startLevel={progress.level}
           startXp={progress.xp}
           startMaterials={progress.materials}
@@ -167,8 +200,9 @@ export default function App() {
           localColor={color}
           classId={classId}
           ultimateRank={progress.ultimateRank}
-          weaponId={progress.weaponId}
-          armorId={progress.armorId}
+          activeAbilityId={progress.activeAbilityId}
+          weaponId={weaponId}
+          armorId={armorId}
           startLevel={progress.level}
           startXp={progress.xp}
           startMaterials={progress.materials}

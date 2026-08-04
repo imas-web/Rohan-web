@@ -30,10 +30,31 @@ export interface ClassDef {
   weaponShape: WeaponShape
   ranged: boolean
   bodyScale: number // 1 = tamaño normal; el enano es más bajo
-  ultimateName: string
+  description: string
+  color: string
+}
+
+export type AbilityArchetype = 'nuke' | 'shield' | 'buff' | 'burst'
+
+export interface AbilityDef {
+  id: string
+  classId: ClassId
+  name: string
+  archetype: AbilityArchetype
   description: string
   cooldown: number // segundos
+  unlockLevel: number
+  unlockCost: number // materiales; 0 para la habilidad inicial
   color: string
+  radius?: number // nuke
+  damageMult?: number // nuke / burst
+  shieldDuration?: number // shield
+  healPct?: number // shield
+  buffDuration?: number // buff
+  buffDamageMult?: number // buff
+  buffAtkSpeedMult?: number // buff
+  buffSpeedMult?: number // buff
+  burstRange?: number // burst
 }
 
 export interface EnemyDef {

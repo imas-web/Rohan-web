@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CLASSES } from '../game/data'
+import { CLASSES, defaultAbilityForClass, getAbility } from '../game/data'
 
 const COLORS = ['#7FD1AE', '#C1502E', '#4C6B8A', '#C9A227', '#8A4C9B', '#D97F5A']
 
@@ -55,7 +55,7 @@ export default function MainMenu({
           ))}
         </div>
 
-        <label className="field-label">Tu clase (define tu habilidad definitiva)</label>
+        <label className="field-label">Tu clase (define tu arma y tus habilidades)</label>
         <div className="class-row">
           {CLASSES.map((c) => (
             <button
@@ -65,7 +65,7 @@ export default function MainMenu({
               onClick={() => setClassId(c.id)}
             >
               <span className="class-name" style={{ color: c.color }}>{c.name}</span>
-              <span className="class-ulti">{c.ultimateName}</span>
+              <span className="class-ulti">{getAbility(defaultAbilityForClass(c.id)).name}</span>
             </button>
           ))}
         </div>

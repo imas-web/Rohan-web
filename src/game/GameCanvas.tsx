@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { MissionDef, EnemyInstance, Vec2 } from './types'
-import { ENEMIES, getArmor, getClass, getWeapon, ultimateCooldownMult, ultimatePowerMult, xpToNextLevel } from './data'
+import { ENEMIES, getAbility, getArmor, getClass, getWeapon, ultimateCooldownMult, ultimatePowerMult, xpToNextLevel } from './data'
 import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supabase/multiplayer'
 import HUD, { type HudState } from '../ui/HUD'
 import TouchControls from '../ui/TouchControls'
@@ -20,6 +20,7 @@ interface LocalPlayer {
   weaponId: string
   armorId: string
   classId: string
+  activeAbilityId: string
   ultimateRank: number
   attackCooldownLeft: number
   attackAnim: number
@@ -28,16 +29,16 @@ interface LocalPlayer {
   blocking: boolean
   ultimateCooldownLeft: number
   ultimateShieldUntil: number
+  buffUntil: number
+  buffDamageMult: number
+  buffAtkSpeedMult: number
+  buffSpeedMult: number
 }
 
 const BLOCK_SPEED_MULT = 0.5
 const BLOCK_DAMAGE_MULT = 0.22
 const ENEMY_TELEGRAPH_WINDOW = 0.45
 const ULTIMATE_SHIELD_DAMAGE_MULT = 0.08
-const ULTIMATE_SHIELD_DURATION = 4
-const ULTIMATE_GUERRERO_RADIUS = 150
-const ULTIMATE_ARQUERO_RADIUS = 280
-const ULTIMATE_MAGO_RADIUS = 320
 const ATTACK_SWING_DURATION = 0.135
 const RANGED_ATTACK_RANGE = 230
 
@@ -101,6 +102,7 @@ export interface GameCanvasProps {
   localName: string
   localColor: string
   classId: string
+  activeAbilityId: string
   ultimateRank: number
   weaponId: string
   armorId: string
@@ -142,6 +144,7 @@ export default function GameCanvas({
   localName,
   localColor,
   classId,
+  activeAbilityId,
   ultimateRank,
   weaponId,
   armorId,
@@ -181,6 +184,7 @@ export default function GameCanvas({
     weaponId,
     armorId,
     classId,
+    activeAbilityId,
     ultimateRank,
     attackCooldownLeft: 0,
     attackAnim: 0,
@@ -189,6 +193,10 @@ export default function GameCanvas({
     blocking: false,
     ultimateCooldownLeft: 0,
     ultimateShieldUntil: 0,
+    buffUntil: 0,
+    buffDamageMult: 1,
+    buffAtkSpeedMult: 1,
+    buffSpeedMult: 1,
   })
 
   const remotePlayersRef = useRef<Map<string, RemotePlayer>>(new Map())
@@ -298,44 +306,49 @@ export default function GameCanvas({
   function castUltimate() {
     const lp = localRef.current
     if (!lp.alive || lp.ultimateCooldownLeft > 0) return
-    const cls = getClass(lp.classId)
+    const ability = getAbility(lp.activeAbilityId)
     const power = ultimatePowerMult(lp.ultimateRank)
-    lp.ultimateCooldownLeft = cls.cooldown * ultimateCooldownMult(lp.ultimateRank)
+    lp.ultimateCooldownLeft = ability.cooldown * ultimateCooldownMult(lp.ultimateRank)
     const weapon = getWeapon(lp.weaponId)
 
-    if (lp.classId === 'guerrero') {
-      const radius = ULTIMATE_GUERRERO_RADIUS * power
+    if (ability.archetype === 'nuke') {
+      const radius = (ability.radius ?? 150) * power
+      const mult = ability.damageMult ?? 1.5
       enemiesRef.current.forEach((e, uid) => {
         if (dist(lp.pos, e.pos) <= radius) {
-          const dmg = weapon.damage * 1.7 * (1 + lp.level * 0.025)
+          const dmg = weapon.damage * mult * (1 + lp.level * 0.025)
           if (isHostRef.current) applyHitToEnemy(uid, dmg, lp.id, lp.pos)
           else room?.sendHitRequest({ enemyUid: uid, damage: dmg, attackerId: lp.id, isCrit: false })
         }
       })
-    } else if (lp.classId === 'arquero') {
-      const radius = ULTIMATE_ARQUERO_RADIUS * power
+    } else if (ability.archetype === 'burst') {
+      const range = (ability.burstRange ?? 250) * power
+      const mult = ability.damageMult ?? 4
+      let nearestUid: string | null = null
+      let nearestD = Infinity
       enemiesRef.current.forEach((e, uid) => {
-        if (dist(lp.pos, e.pos) <= radius) {
-          const dmg = weapon.damage * 1.1 * (1 + lp.level * 0.025)
-          if (isHostRef.current) applyHitToEnemy(uid, dmg, lp.id, lp.pos)
-          else room?.sendHitRequest({ enemyUid: uid, damage: dmg, attackerId: lp.id, isCrit: false })
+        const d = dist(lp.pos, e.pos)
+        if (d <= range && d < nearestD) {
+          nearestD = d
+          nearestUid = uid
         }
       })
-    } else if (lp.classId === 'mago') {
-      const radius = ULTIMATE_MAGO_RADIUS * power
-      enemiesRef.current.forEach((e, uid) => {
-        if (dist(lp.pos, e.pos) <= radius) {
-          const dmg = weapon.damage * 0.95 * (1 + lp.level * 0.025)
-          if (isHostRef.current) applyHitToEnemy(uid, dmg, lp.id, lp.pos)
-          else room?.sendHitRequest({ enemyUid: uid, damage: dmg, attackerId: lp.id, isCrit: false })
-        }
-      })
-    } else if (lp.classId === 'enano') {
-      lp.ultimateShieldUntil = performance.now() + ULTIMATE_SHIELD_DURATION * power * 1000
-      lp.hp = Math.min(lp.maxHp, lp.hp + lp.maxHp * 0.3 * power)
+      if (nearestUid) {
+        const dmg = weapon.damage * mult * (1 + lp.level * 0.025)
+        if (isHostRef.current) applyHitToEnemy(nearestUid, dmg, lp.id, lp.pos)
+        else room?.sendHitRequest({ enemyUid: nearestUid, damage: dmg, attackerId: lp.id, isCrit: true })
+      }
+    } else if (ability.archetype === 'shield') {
+      lp.ultimateShieldUntil = performance.now() + (ability.shieldDuration ?? 4) * power * 1000
+      lp.hp = Math.min(lp.maxHp, lp.hp + lp.maxHp * (ability.healPct ?? 0.25) * power)
+    } else if (ability.archetype === 'buff') {
+      lp.buffUntil = performance.now() + (ability.buffDuration ?? 6) * power * 1000
+      lp.buffDamageMult = ability.buffDamageMult ?? 1
+      lp.buffAtkSpeedMult = ability.buffAtkSpeedMult ?? 1
+      lp.buffSpeedMult = ability.buffSpeedMult ?? 1
     }
 
-    floatingRef.current.push({ pos: { ...lp.pos }, text: `¡${cls.ultimateName}!`, color: cls.color, life: 1.3, vy: -24 })
+    floatingRef.current.push({ pos: { ...lp.pos }, text: `¡${ability.name}!`, color: ability.color, life: 1.3, vy: -24 })
   }
 
   function tryLocalAttack(now: number) {
@@ -343,7 +356,9 @@ export default function GameCanvas({
     if (!lp.alive || lp.attackCooldownLeft > 0) return
     const weapon = getWeapon(lp.weaponId)
     const cls = getClass(lp.classId)
-    lp.attackCooldownLeft = 1 / weapon.attackSpeed
+    const buffActive = performance.now() < lp.buffUntil
+    const dmgMult = buffActive ? lp.buffDamageMult : 1
+    lp.attackCooldownLeft = 1 / weapon.attackSpeed / (buffActive ? lp.buffAtkSpeedMult : 1)
     lp.attackAnim = ATTACK_SWING_DURATION
 
     if (cls.ranged) {
@@ -363,7 +378,7 @@ export default function GameCanvas({
         const targetPos: Vec2 = (nearestE as EnemyInstance).pos
         lp.facing = normalize({ x: targetPos.x - lp.pos.x, y: targetPos.y - lp.pos.y })
         const crit = Math.random() < weapon.critChance
-        const dmg = weapon.damage * (1 + lp.level * 0.025) * (crit ? 1.8 : 1)
+        const dmg = weapon.damage * dmgMult * (1 + lp.level * 0.025) * (crit ? 1.8 : 1)
         arrowsRef.current.push({ from: { ...lp.pos }, to: { ...targetPos }, t: 0, kind: cls.weaponShape === 'staff' ? 'bolt' : 'arrow' })
         if (isHostRef.current) {
           applyHitToEnemy(nearestUid, dmg, lp.id, lp.pos)
@@ -377,7 +392,7 @@ export default function GameCanvas({
     enemiesRef.current.forEach((e, uid) => {
       if (dist(lp.pos, e.pos) <= weapon.range) {
         const crit = Math.random() < weapon.critChance
-        const dmg = weapon.damage * (1 + lp.level * 0.025) * (crit ? 1.8 : 1)
+        const dmg = weapon.damage * dmgMult * (1 + lp.level * 0.025) * (crit ? 1.8 : 1)
         if (isHostRef.current) {
           applyHitToEnemy(uid, dmg, lp.id, lp.pos)
         } else {
@@ -597,7 +612,8 @@ export default function GameCanvas({
       if (joystickRef.current.x !== 0 || joystickRef.current.y !== 0) mv = { ...joystickRef.current }
       mv = normalize(mv)
       const armor = getArmor(lp.armorId)
-      const speed = 150 * armor.speedMod * (1 + lp.level * 0.004) * (lp.blocking ? BLOCK_SPEED_MULT : 1)
+      const buffSpeed = performance.now() < lp.buffUntil ? lp.buffSpeedMult : 1
+      const speed = 150 * armor.speedMod * (1 + lp.level * 0.004) * (lp.blocking ? BLOCK_SPEED_MULT : 1) * buffSpeed
       if (mv.x !== 0 || mv.y !== 0) {
         lp.facing = mv
         const targetX = Math.min(WORLD_W - 20, Math.max(20, lp.pos.x + mv.x * speed * dt))
@@ -1096,9 +1112,9 @@ export default function GameCanvas({
         baseMaxHp: BASE_MAX_HP,
         alive: lp.alive,
         playersOnline: remotePlayersRef.current.size + 1,
-        ultimateName: getClass(lp.classId).ultimateName,
+        ultimateName: getAbility(lp.activeAbilityId).name,
         ultimateCooldownLeft: lp.ultimateCooldownLeft,
-        ultimateCooldownMax: getClass(lp.classId).cooldown * ultimateCooldownMult(lp.ultimateRank),
+        ultimateCooldownMax: getAbility(lp.activeAbilityId).cooldown * ultimateCooldownMult(lp.ultimateRank),
       })
     }, 150)
 
