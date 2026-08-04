@@ -8,12 +8,19 @@ export interface PlatformEnemySpawn {
   maxX: number
 }
 
+export interface ChestSpawn {
+  x: number
+  y: number // dentro del carril; los extremos obligan a moverse arriba/abajo para agarrarlo
+  gold: number
+}
+
 export interface PlatformerLevel {
   width: number
   laneMinY: number
   laneMaxY: number
   checkpoints: number[]
   enemies: PlatformEnemySpawn[]
+  chests: ChestSpawn[]
   goal: Vec2
   startPos: Vec2
 }
@@ -50,6 +57,15 @@ export const PLATFORMER_LEVEL: PlatformerLevel = {
     { defId: 'orco_guerrero', x: 3400, y: GY, minX: 3340, maxX: 3480 },
     { defId: 'berserker_uruk', x: 3600, y: GY - 30, minX: 3540, maxX: 3680 },
     { defId: 'orco_guerrero', x: 3750, y: GY + 30, minX: 3690, maxX: 3830 },
+  ],
+  chests: [
+    { x: 350, y: GY - 68, gold: 20 },
+    { x: 900, y: GY + 68, gold: 20 },
+    { x: 1450, y: GY - 68, gold: 25 },
+    { x: 2000, y: GY + 68, gold: 20 },
+    { x: 2550, y: GY - 68, gold: 25 },
+    { x: 3100, y: GY + 68, gold: 25 },
+    { x: 3650, y: GY - 68, gold: 30 },
   ],
   goal: { x: 4130, y: GY },
 }

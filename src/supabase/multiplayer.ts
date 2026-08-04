@@ -1,6 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from './client'
-import type { EnemyInstance, PlayerState, Vec2 } from '../game/types'
+import type { ChestInstance, EnemyInstance, PlayerState, Vec2 } from '../game/types'
 
 /**
  * ARQUITECTURA DE RED (simple, pensada para 2-4 celulares y hosting gratis):
@@ -35,6 +35,7 @@ export interface NetPlayerUpdate {
 
 export interface EnemySyncPayload {
   enemies: EnemyInstance[]
+  chests?: ChestInstance[]
   missionTimeLeft?: number
   baseHp?: number
   wave?: number
@@ -57,11 +58,17 @@ export interface PlayerDamagePayload {
   amount: number
 }
 
+export interface ChestCollectPayload {
+  chestUid: string
+  playerId: string
+}
+
 export type Listeners = {
   onPlayerUpdate?: (p: NetPlayerUpdate) => void
   onEnemySync?: (p: EnemySyncPayload) => void
   onHitRequest?: (p: HitRequestPayload) => void
   onPlayerDamage?: (p: PlayerDamagePayload) => void
+  onChestCollect?: (p: ChestCollectPayload) => void
   onPresenceChange?: (members: { id: string; name: string; color: string; joinedAt: number }[]) => void
   onGameStart?: (missionId: string) => void
 }
@@ -97,6 +104,9 @@ export class MultiplayerRoom {
       })
       .on('broadcast', { event: 'player_damage' }, ({ payload }) => {
         listeners.onPlayerDamage?.(payload as PlayerDamagePayload)
+      })
+      .on('broadcast', { event: 'chest_collect' }, ({ payload }) => {
+        listeners.onChestCollect?.(payload as ChestCollectPayload)
       })
       .on('broadcast', { event: 'start_game' }, ({ payload }) => {
         listeners.onGameStart?.((payload as { missionId: string }).missionId)
@@ -139,6 +149,10 @@ export class MultiplayerRoom {
 
   sendPlayerDamage(p: PlayerDamagePayload) {
     this.channel?.send({ type: 'broadcast', event: 'player_damage', payload: p })
+  }
+
+  sendChestCollect(p: ChestCollectPayload) {
+    this.channel?.send({ type: 'broadcast', event: 'chest_collect', payload: p })
   }
 
   sendGameStart(missionId: string) {

@@ -1,12 +1,19 @@
 import { useEffect, useState, type MutableRefObject } from 'react'
 import {
   MISSIONS,
+  RARITY_COLOR,
   ULTIMATE_MAX_RANK,
   ULTIMATE_RANK_COST,
+  WEAPON_MAX_TIER,
+  WEAPON_TIER_UPGRADE_COST,
   abilitiesForClass,
+  armorIdForLevel,
   getAbility,
+  getArmor,
   getClass,
+  getWeapon,
   skillPointsForLevel,
+  weaponIdForClassTier,
   xpToNextLevel,
 } from '../game/data'
 import type { MissionDef } from '../game/types'
@@ -16,6 +23,8 @@ export interface Progress {
   level: number
   xp: number
   materials: number
+  gold: number
+  weaponTier: number
   ultimateRank: number
   activeAbilityId: string
   unlockedAbilityIds: string[]
@@ -27,6 +36,7 @@ export default function CampScreen({
   onUnlockAbility,
   onSelectAbility,
   onUpgradeUltimate,
+  onUpgradeWeapon,
   room,
   listenersRef,
   onStart,
@@ -37,16 +47,22 @@ export default function CampScreen({
   onUnlockAbility: (abilityId: string, cost: number) => void
   onSelectAbility: (abilityId: string) => void
   onUpgradeUltimate: () => void
+  onUpgradeWeapon: () => void
   room: MultiplayerRoom | null
   listenersRef: MutableRefObject<Listeners>
   onStart: (mission: MissionDef) => void
   onBack: () => void
 }) {
   const cls = getClass(classId)
+  const weapon = getWeapon(weaponIdForClassTier(classId, progress.weaponTier))
+  const armor = getArmor(armorIdForLevel(progress.level))
   const activeAbility = getAbility(progress.activeAbilityId)
   const totalSkillPoints = skillPointsForLevel(progress.level)
   const nextRankCost = ULTIMATE_RANK_COST[progress.ultimateRank]
   const canUpgradeUltimate = progress.ultimateRank < ULTIMATE_MAX_RANK && totalSkillPoints >= nextRankCost
+  const weaponMaxed = progress.weaponTier >= WEAPON_MAX_TIER
+  const nextWeaponCost = WEAPON_TIER_UPGRADE_COST[progress.weaponTier - 1]
+  const canUpgradeWeapon = !weaponMaxed && progress.gold >= nextWeaponCost
   const [members, setMembers] = useState<{ id: string; name: string; color: string }[]>([])
   const isHost = !room || room.isHost
 
@@ -82,7 +98,7 @@ export default function CampScreen({
             <div className="hud-bar-fill xp" style={{ width: `${(progress.xp / xpToNextLevel(progress.level)) * 100}%` }} />
             <span className="hud-bar-label">{progress.xp} / {xpToNextLevel(progress.level)} XP</span>
           </div>
-          <p className="materials-count">◆ {progress.materials} materiales</p>
+          <p className="materials-count">◆ {progress.materials} materiales · ⛃ {progress.gold} oro</p>
         </div>
         <button className="btn-ghost" onClick={onBack}>Cambiar nombre o clase</button>
       </div>
@@ -98,6 +114,26 @@ export default function CampScreen({
           {!isHost && <p className="hint">Esperando a que el líder de la sala elija la misión...</p>}
         </div>
       )}
+
+      <section className="camp-section">
+        <h2>Tu equipo — {cls.name}</h2>
+        <p className="hint">La armadura mejora sola al subir de nivel. El arma se mejora gastando el oro que encontrás en cofres.</p>
+        <div className="item-grid">
+          <div className="item-card equipped" style={{ borderColor: RARITY_COLOR[weapon.rarity] }}>
+            <span className="item-name">{weapon.name}</span>
+            <span className="item-rarity" style={{ color: RARITY_COLOR[weapon.rarity] }}>{weapon.rarity}</span>
+            <span className="item-stats">Daño {weapon.damage} · Vel. {weapon.attackSpeed}/s · Crít {Math.round(weapon.critChance * 100)}%</span>
+            <button className="btn-secondary" disabled={!canUpgradeWeapon} onClick={onUpgradeWeapon}>
+              {weaponMaxed ? 'Arma al máximo' : `Mejorar arma (⛃ ${nextWeaponCost})`}
+            </button>
+          </div>
+          <div className="item-card equipped" style={{ borderColor: RARITY_COLOR[armor.rarity] }}>
+            <span className="item-name">{armor.name}</span>
+            <span className="item-rarity" style={{ color: RARITY_COLOR[armor.rarity] }}>{armor.rarity}</span>
+            <span className="item-stats">Def. {armor.defense} · +{armor.hpBonus} HP</span>
+          </div>
+        </div>
+      </section>
 
       <section className="camp-section">
         <h2>Habilidades — {cls.name}</h2>

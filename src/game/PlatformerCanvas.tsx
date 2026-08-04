@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
-import type { MissionDef, EnemyInstance, Vec2 } from './types'
+import type { ChestInstance, MissionDef, EnemyInstance, Vec2 } from './types'
 import { ENEMIES, enemyCountMultiplierForParty, getArmor, getWeapon, rewardMultiplierForParty, xpToNextLevel } from './data'
 import { PLATFORMER_LEVEL } from './platformerLevel'
 import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supabase/multiplayer'
@@ -9,6 +9,7 @@ import PlatformerControls from '../ui/PlatformerControls'
 
 const MOVE_SPEED = 230
 const MOVE_SPEED_Y = 170
+const CAMERA_ZOOM = 2.1 // acerca la cámara para que el carril angosto no deje tanto espacio muerto arriba/abajo
 const CONTACT_RANGE = 30
 const CONTACT_COOLDOWN = 0.8
 const INVULN_DURATION = 1.4
@@ -31,6 +32,7 @@ interface LocalPlatformer {
   level: number
   xp: number
   materials: number
+  gold: number
   weaponId: string
   armorId: string
   attackCooldownLeft: number
@@ -75,6 +77,7 @@ export interface PlatformerCanvasProps {
   startLevel: number
   startXp: number
   startMaterials: number
+  startGold: number
   room: MultiplayerRoom | null
   listenersRef: MutableRefObject<Listeners>
   onExit: (result: {
@@ -84,6 +87,7 @@ export interface PlatformerCanvasProps {
     finalLevel: number
     finalXp: number
     finalMaterials: number
+    finalGold: number
   }) => void
 }
 
@@ -97,6 +101,7 @@ export default function PlatformerCanvas({
   startLevel,
   startXp,
   startMaterials,
+  startGold,
   room,
   listenersRef,
   onExit,
@@ -112,11 +117,13 @@ export default function PlatformerCanvas({
     finalLevel: number
     finalXp: number
     finalMaterials: number
+    finalGold: number
   } | null>(null)
 
   const isHostRef = useRef<boolean>(!room)
   const materialsEarnedRef = useRef(0)
   const xpEarnedRef = useRef(0)
+  const goldEarnedRef = useRef(0)
   const livesRef = useRef(START_LIVES)
   const checkpointRef = useRef<number>(level.startPos.x)
   const finishedRef = useRef(false)
@@ -135,6 +142,7 @@ export default function PlatformerCanvas({
     level: startLevel,
     xp: startXp,
     materials: startMaterials,
+    gold: startGold,
     weaponId,
     armorId,
     attackCooldownLeft: 0,
@@ -146,6 +154,8 @@ export default function PlatformerCanvas({
   const remotePlayersRef = useRef<Map<string, RemotePlatformer>>(new Map())
   const enemiesRef = useRef<Map<string, EnemyInstance>>(new Map())
   const patrolBoundsRef = useRef<Map<string, PatrolBounds>>(new Map())
+  const chestsRef = useRef<Map<string, ChestInstance>>(new Map())
+  const collectedLocallyRef = useRef<Set<string>>(new Set())
   const floatingRef = useRef<FloatingText[]>([])
   const remoteSwingRef = useRef<Map<string, number>>(new Map())
 
@@ -241,6 +251,29 @@ export default function PlatformerCanvas({
     }
   }
 
+  function grantGold(amount: number) {
+    const lp = localRef.current
+    lp.gold += amount
+    goldEarnedRef.current += amount
+    floatingRef.current.push({ pos: { x: lp.x, y: lp.y - 20 }, text: `+${amount} oro`, color: '#C9A227', life: 1.1, vy: -30 })
+  }
+
+  function tryCollectChests() {
+    const lp = localRef.current
+    chestsRef.current.forEach((chest) => {
+      if (chest.collected || collectedLocallyRef.current.has(chest.uid)) return
+      if (dist({ x: lp.x, y: lp.y }, chest.pos) <= 34) {
+        collectedLocallyRef.current.add(chest.uid)
+        grantGold(chest.gold)
+        if (isHostRef.current) {
+          chest.collected = true
+        } else {
+          room?.sendChestCollect({ chestUid: chest.uid, playerId: lp.id })
+        }
+      }
+    })
+  }
+
   function applyHitToEnemy(uid: string, damage: number) {
     const e = enemiesRef.current.get(uid)
     if (!e) return
@@ -268,6 +301,11 @@ export default function PlatformerCanvas({
     let lastHostBroadcast = 0
 
     preloadSprites()
+
+    level.chests.forEach((c, i) => {
+      const uid = `chest_${i}`
+      chestsRef.current.set(uid, { uid, pos: { x: c.x, y: c.y }, gold: c.gold, collected: false })
+    })
 
     function resize() {
       canvas.width = window.innerWidth
@@ -327,6 +365,8 @@ export default function PlatformerCanvas({
       if (downHeldRef.current) moveDirY += 1
       lp.vy = moveDirY * MOVE_SPEED_Y
       lp.y = Math.min(level.laneMaxY, Math.max(level.laneMinY, lp.y + lp.vy * dt))
+
+      tryCollectChests()
 
       if (lp.attackCooldownLeft > 0) lp.attackCooldownLeft -= dt
       if (lp.attackAnim > 0) lp.attackAnim -= dt
@@ -422,7 +462,7 @@ export default function PlatformerCanvas({
 
       if (room && isHostRef.current && ts - lastHostBroadcast > 100) {
         lastHostBroadcast = ts
-        room.sendEnemySync({ enemies: Array.from(enemiesRef.current.values()) })
+        room.sendEnemySync({ enemies: Array.from(enemiesRef.current.values()), chests: Array.from(chestsRef.current.values()) })
       }
 
       floatingRef.current = floatingRef.current.filter((f) => f.life > 0)
@@ -439,7 +479,8 @@ export default function PlatformerCanvas({
         if (p.pos.x > leaderX) leaderX = p.pos.x
       })
       const w = canvas.width
-      camXRef.current = Math.min(level.width - w / 2, Math.max(w / 2, leaderX))
+      const visibleHalfW = w / 2 / CAMERA_ZOOM
+      camXRef.current = Math.min(level.width - visibleHalfW, Math.max(visibleHalfW, leaderX))
       camYRef.current = level.goal.y
 
       render(dt)
@@ -452,6 +493,7 @@ export default function PlatformerCanvas({
           finalLevel: lp.level,
           finalXp: lp.xp,
           finalMaterials: lp.materials + 40,
+          finalGold: lp.gold,
         })
       } else if (!lp.alive && !result) {
         setResult({
@@ -461,6 +503,7 @@ export default function PlatformerCanvas({
           finalLevel: lp.level,
           finalXp: lp.xp,
           finalMaterials: lp.materials,
+          finalGold: lp.gold,
         })
       }
 
@@ -545,11 +588,33 @@ export default function PlatformerCanvas({
       }
 
       ctx.save()
-      ctx.translate(w / 2 - camX, h / 2 - camY)
+      ctx.translate(w / 2, h / 2)
+      ctx.scale(CAMERA_ZOOM, CAMERA_ZOOM)
+      ctx.translate(-camX, -camY)
 
       drawGround()
       drawFlagPole(checkpointRef.current, level.laneMaxY, '#4C6B8A', '')
       drawFlagPole(level.goal.x, level.goal.y, '#C9A227', 'META')
+
+      // cofres de oro
+      chestsRef.current.forEach((chest) => {
+        if (chest.collected) return
+        const bob = Math.sin(performance.now() / 260 + chest.pos.x) * 3
+        ctx.save()
+        ctx.translate(chest.pos.x, chest.pos.y + bob)
+        ctx.fillStyle = '#5C4A2E'
+        ctx.fillRect(-14, -8, 28, 16)
+        ctx.fillStyle = '#C9A227'
+        ctx.fillRect(-14, -10, 28, 5)
+        ctx.strokeStyle = '#3A2E1C'
+        ctx.lineWidth = 2
+        ctx.strokeRect(-14, -10, 28, 18)
+        ctx.beginPath()
+        ctx.arc(0, -10, 3, 0, Math.PI * 2)
+        ctx.fillStyle = '#E8DFC8'
+        ctx.fill()
+        ctx.restore()
+      })
 
       // enemigos
       enemiesRef.current.forEach((e) => {
@@ -656,6 +721,11 @@ export default function PlatformerCanvas({
       const map = new Map<string, EnemyInstance>()
       payload.enemies.forEach((e) => map.set(e.uid, e))
       enemiesRef.current = map
+      if (payload.chests) {
+        const chestMap = new Map<string, ChestInstance>()
+        payload.chests.forEach((c) => chestMap.set(c.uid, c))
+        chestsRef.current = chestMap
+      }
     }
     listenersRef.current.onHitRequest = (p) => {
       if (!isHostRef.current) return
@@ -664,11 +734,17 @@ export default function PlatformerCanvas({
     listenersRef.current.onPlayerDamage = (p) => {
       if (p.targetId === localRef.current.id) applyDamageToLocal(p.amount)
     }
+    listenersRef.current.onChestCollect = (p) => {
+      if (!isHostRef.current) return
+      const chest = chestsRef.current.get(p.chestUid)
+      if (chest && !chest.collected) chest.collected = true
+    }
     return () => {
       listenersRef.current.onPlayerUpdate = undefined
       listenersRef.current.onEnemySync = undefined
       listenersRef.current.onHitRequest = undefined
       listenersRef.current.onPlayerDamage = undefined
+      listenersRef.current.onChestCollect = undefined
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room])
@@ -688,6 +764,10 @@ export default function PlatformerCanvas({
           <div>
             <span className="label">Materiales obtenidos</span>
             <span className="value">+{result.materialsEarned}</span>
+          </div>
+          <div>
+            <span className="label">Oro obtenido</span>
+            <span className="value">+{Math.max(0, goldEarnedRef.current)}</span>
           </div>
           <div>
             <span className="label">Nivel actual</span>

@@ -5,7 +5,7 @@ import CampScreen, { type Progress } from './ui/CampScreen'
 import GameCanvas from './game/GameCanvas'
 import PlatformerCanvas from './game/PlatformerCanvas'
 import type { MissionDef } from './game/types'
-import { armorIdForLevel, defaultAbilityForClass, weaponIdForClassLevel } from './game/data'
+import { WEAPON_MAX_TIER, WEAPON_TIER_UPGRADE_COST, armorIdForLevel, defaultAbilityForClass, weaponIdForClassTier } from './game/data'
 import { MultiplayerRoom, makePlayerId, type Listeners } from './supabase/multiplayer'
 
 type Screen = 'menu' | 'lobby' | 'camp' | 'game'
@@ -54,6 +54,8 @@ export default function App() {
           level: saved.level,
           xp: saved.xp,
           materials: saved.materials,
+          gold: saved.gold ?? 0,
+          weaponTier: saved.weaponTier ?? 1,
           ultimateRank: saved.ultimateRank ?? 1,
           activeAbilityId: saved.activeAbilityId ?? defaultAbilityForClass(saved.classId ?? 'guerrero'),
           unlockedAbilityIds: saved.unlockedAbilityIds ?? [defaultAbilityForClass(saved.classId ?? 'guerrero')],
@@ -62,6 +64,8 @@ export default function App() {
           level: 1,
           xp: 0,
           materials: 0,
+          gold: 0,
+          weaponTier: 1,
           ultimateRank: 1,
           activeAbilityId: defaultAbilityForClass('guerrero'),
           unlockedAbilityIds: [defaultAbilityForClass('guerrero')],
@@ -79,6 +83,8 @@ export default function App() {
       level: 1,
       xp: 0,
       materials: 0,
+      gold: 0,
+      weaponTier: 1,
       ultimateRank: 1,
       activeAbilityId: defaultAbilityForClass(classId),
       unlockedAbilityIds: [defaultAbilityForClass(classId)],
@@ -93,6 +99,7 @@ export default function App() {
       activeAbilityId: defaultAbilityForClass(cls),
       unlockedAbilityIds: [defaultAbilityForClass(cls)],
       ultimateRank: 1,
+      weaponTier: 1,
     }))
   }
 
@@ -129,22 +136,32 @@ export default function App() {
     setProgress((prev) => ({ ...prev, ultimateRank: prev.ultimateRank + 1 }))
   }
 
+  function handleUpgradeWeapon() {
+    setProgress((prev) => {
+      if (prev.weaponTier >= WEAPON_MAX_TIER) return prev
+      const cost = WEAPON_TIER_UPGRADE_COST[prev.weaponTier - 1]
+      if (prev.gold < cost) return prev
+      return { ...prev, gold: prev.gold - cost, weaponTier: prev.weaponTier + 1 }
+    })
+  }
+
   function handleStart(m: MissionDef) {
     setMission(m)
     setScreen('game')
   }
 
-  function handleExit(result: { finalLevel: number; finalXp: number; finalMaterials: number }) {
+  function handleExit(result: { finalLevel: number; finalXp: number; finalMaterials: number; finalGold: number }) {
     setProgress((prev) => ({
       ...prev,
       level: result.finalLevel,
       xp: result.finalXp,
       materials: result.finalMaterials,
+      gold: result.finalGold,
     }))
     setScreen('camp')
   }
 
-  const weaponId = weaponIdForClassLevel(classId, progress.level)
+  const weaponId = weaponIdForClassTier(classId, progress.weaponTier)
   const armorId = armorIdForLevel(progress.level)
 
   return (
@@ -183,6 +200,7 @@ export default function App() {
           onUnlockAbility={handleUnlockAbility}
           onSelectAbility={handleSelectAbility}
           onUpgradeUltimate={handleUpgradeUltimate}
+          onUpgradeWeapon={handleUpgradeWeapon}
           room={room}
           listenersRef={listenersRef}
           onStart={handleStart}
@@ -201,6 +219,7 @@ export default function App() {
           startLevel={progress.level}
           startXp={progress.xp}
           startMaterials={progress.materials}
+          startGold={progress.gold}
           room={room}
           listenersRef={listenersRef}
           onExit={handleExit}
@@ -220,6 +239,7 @@ export default function App() {
           startLevel={progress.level}
           startXp={progress.xp}
           startMaterials={progress.materials}
+          startGold={progress.gold}
           room={room}
           listenersRef={listenersRef}
           onExit={handleExit}

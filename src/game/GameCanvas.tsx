@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
-import type { MissionDef, EnemyInstance, Vec2 } from './types'
+import type { ChestInstance, MissionDef, EnemyInstance, Vec2 } from './types'
 import {
+  CHEST_GOLD,
   ENEMIES,
   enemyCountMultiplierForParty,
   getAbility,
@@ -29,6 +30,7 @@ interface LocalPlayer {
   level: number
   xp: number
   materials: number
+  gold: number
   weaponId: string
   armorId: string
   classId: string
@@ -121,6 +123,7 @@ export interface GameCanvasProps {
   startLevel: number
   startXp: number
   startMaterials: number
+  startGold: number
   room: MultiplayerRoom | null
   listenersRef: MutableRefObject<Listeners>
   onExit: (result: {
@@ -130,6 +133,7 @@ export interface GameCanvasProps {
     finalLevel: number
     finalXp: number
     finalMaterials: number
+    finalGold: number
   }) => void
 }
 
@@ -163,6 +167,7 @@ export default function GameCanvas({
   startLevel,
   startXp,
   startMaterials,
+  startGold,
   room,
   listenersRef,
   onExit,
@@ -176,11 +181,16 @@ export default function GameCanvas({
     finalLevel: number
     finalXp: number
     finalMaterials: number
+    finalGold: number
   } | null>(null)
 
   const isHostRef = useRef<boolean>(!room)
   const materialsEarnedRef = useRef(0)
   const xpEarnedRef = useRef(0)
+  const goldEarnedRef = useRef(0)
+  const chestsRef = useRef<Map<string, ChestInstance>>(new Map())
+  const collectedLocallyRef = useRef<Set<string>>(new Set())
+  const chestSpawnTimerRef = useRef(8)
 
   const localRef = useRef<LocalPlayer>({
     id: room?.playerId ?? 'solo',
@@ -193,6 +203,7 @@ export default function GameCanvas({
     level: startLevel,
     xp: startXp,
     materials: startMaterials,
+    gold: startGold,
     weaponId,
     armorId,
     classId,
@@ -268,6 +279,13 @@ export default function GameCanvas({
       floatingRef.current.push({ pos: { ...lp.pos }, text: '¡Subiste de nivel!', color: '#7FD1AE', life: 1.4, vy: -22 })
     }
     void enemyName
+  }
+
+  function grantGold(amount: number) {
+    const lp = localRef.current
+    lp.gold += amount
+    goldEarnedRef.current += amount
+    floatingRef.current.push({ pos: { ...lp.pos, y: lp.pos.y - 20 }, text: `+${amount} oro`, color: '#C9A227', life: 1.1, vy: -30 })
   }
 
   function applyHitToEnemy(uid: string, damage: number, attackerId: string, attackerPos: Vec2) {
@@ -477,6 +495,38 @@ export default function GameCanvas({
       return { x: WORLD_W - 40, y: Math.random() * WORLD_H }
     }
 
+    function randomCourtyardPos(): Vec2 {
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const pos = {
+          x: CASTLE_CX + (Math.random() * 2 - 1) * CASTLE_R_IN * 0.8,
+          y: CASTLE_CY + (Math.random() * 2 - 1) * CASTLE_R_IN * 0.8,
+        }
+        if (!isBlockedByWall(pos)) return pos
+      }
+      return { x: CASTLE_CX, y: CASTLE_CY }
+    }
+
+    function spawnChest() {
+      const uid = 'c_' + Math.random().toString(36).slice(2, 10)
+      chestsRef.current.set(uid, { uid, pos: randomCourtyardPos(), gold: CHEST_GOLD, collected: false })
+    }
+
+    function tryCollectChests() {
+      const lp = localRef.current
+      chestsRef.current.forEach((chest) => {
+        if (chest.collected || collectedLocallyRef.current.has(chest.uid)) return
+        if (dist(lp.pos, chest.pos) <= 30) {
+          collectedLocallyRef.current.add(chest.uid)
+          grantGold(chest.gold)
+          if (isHostRef.current) {
+            chest.collected = true
+          } else {
+            room?.sendChestCollect({ chestUid: chest.uid, playerId: lp.id })
+          }
+        }
+      })
+    }
+
     function allAlivePlayers(): { id: string; pos: Vec2; alive: boolean }[] {
       const list: { id: string; pos: Vec2; alive: boolean }[] = [
         { id: localRef.current.id, pos: localRef.current.pos, alive: localRef.current.alive },
@@ -541,6 +591,14 @@ export default function GameCanvas({
       if (players.length > 0 && players.every((p) => !p.alive)) {
         ms.finished = true
         ms.victory = false
+      }
+
+      // cofres de oro: aparecen cada tanto en el patio, hasta un máximo activo
+      chestSpawnTimerRef.current -= dt
+      const activeChests = Array.from(chestsRef.current.values()).filter((c) => !c.collected).length
+      if (chestSpawnTimerRef.current <= 0 && activeChests < 2) {
+        chestSpawnTimerRef.current = 22
+        spawnChest()
       }
     }
 
@@ -643,6 +701,7 @@ export default function GameCanvas({
         if (!isBlockedByWall({ x: nx, y: targetY })) ny = targetY
         lp.pos = { x: nx, y: ny }
       }
+      tryCollectChests()
       if (lp.attackCooldownLeft > 0) lp.attackCooldownLeft -= dt
       if (lp.attackAnim > 0) lp.attackAnim -= dt
       if (lp.hitFlash > 0) lp.hitFlash -= dt
@@ -691,6 +750,7 @@ export default function GameCanvas({
         const ms = missionStateRef.current
         room.sendEnemySync({
           enemies: Array.from(enemiesRef.current.values()),
+          chests: Array.from(chestsRef.current.values()),
           missionTimeLeft: ms.timeLeft,
           baseHp: ms.baseHp,
           wave: ms.wave,
@@ -727,6 +787,7 @@ export default function GameCanvas({
           finalLevel: lp.level,
           finalXp: lp.xp,
           finalMaterials: lp.materials,
+          finalGold: lp.gold,
         })
       }
 
@@ -789,6 +850,26 @@ export default function GameCanvas({
         ctx.fillText('FORTALEZA', BASE_POS.x, BASE_POS.y + 5)
         drawBar(ctx, BASE_POS.x - 50, BASE_POS.y - 90, 100, 10, ms.baseHp / BASE_MAX_HP, '#C1502E')
       }
+
+      // cofres de oro
+      chestsRef.current.forEach((chest) => {
+        if (chest.collected) return
+        const bob = Math.sin(performance.now() / 260 + chest.pos.x) * 3
+        ctx.save()
+        ctx.translate(chest.pos.x, chest.pos.y + bob)
+        ctx.fillStyle = '#5C4A2E'
+        ctx.fillRect(-14, -8, 28, 16)
+        ctx.fillStyle = '#C9A227'
+        ctx.fillRect(-14, -10, 28, 5)
+        ctx.strokeStyle = '#3A2E1C'
+        ctx.lineWidth = 2
+        ctx.strokeRect(-14, -10, 28, 18)
+        ctx.beginPath()
+        ctx.arc(0, -10, 3, 0, Math.PI * 2)
+        ctx.fillStyle = '#E8DFC8'
+        ctx.fill()
+        ctx.restore()
+      })
 
       // enemigos
       enemiesRef.current.forEach((e) => {
@@ -1184,6 +1265,11 @@ export default function GameCanvas({
       const map = new Map<string, EnemyInstance>()
       payload.enemies.forEach((e) => map.set(e.uid, e))
       enemiesRef.current = map
+      if (payload.chests) {
+        const chestMap = new Map<string, ChestInstance>()
+        payload.chests.forEach((c) => chestMap.set(c.uid, c))
+        chestsRef.current = chestMap
+      }
       const ms = missionStateRef.current
       if (payload.missionTimeLeft !== undefined) ms.timeLeft = payload.missionTimeLeft
       if (payload.baseHp !== undefined) ms.baseHp = payload.baseHp
@@ -1208,12 +1294,18 @@ export default function GameCanvas({
     listenersRef.current.onPlayerDamage = (p) => {
       if (p.targetId === localRef.current.id) applyDamageToLocal(p.amount)
     }
+    listenersRef.current.onChestCollect = (p) => {
+      if (!isHostRef.current) return
+      const chest = chestsRef.current.get(p.chestUid)
+      if (chest && !chest.collected) chest.collected = true
+    }
 
     return () => {
       listenersRef.current.onPlayerUpdate = undefined
       listenersRef.current.onEnemySync = undefined
       listenersRef.current.onHitRequest = undefined
       listenersRef.current.onPlayerDamage = undefined
+      listenersRef.current.onChestCollect = undefined
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room])
@@ -1233,6 +1325,10 @@ export default function GameCanvas({
           <div>
             <span className="label">Materiales obtenidos</span>
             <span className="value">+{result.materialsEarned}</span>
+          </div>
+          <div>
+            <span className="label">Oro obtenido</span>
+            <span className="value">+{Math.max(0, goldEarnedRef.current)}</span>
           </div>
           <div>
             <span className="label">Nivel actual</span>

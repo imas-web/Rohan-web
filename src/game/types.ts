@@ -113,6 +113,13 @@ export interface EnemyInstance {
   hitFlash: number
 }
 
+export interface ChestInstance {
+  uid: string
+  pos: Vec2
+  gold: number
+  collected: boolean
+}
+
 export interface ProjectileInstance {
   uid: string
   pos: Vec2

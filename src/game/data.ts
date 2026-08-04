@@ -168,6 +168,10 @@ export function rewardMultiplierForParty(partySize: number): number {
   return 1 / Math.max(1, partySize)
 }
 
+// Oro que da un cofre — no escala con la cantidad de jugadores porque los
+// cofres son un recurso fijo del nivel, no algo que "aparece" por matar.
+export const CHEST_GOLD = 25
+
 export function getWeapon(id: string): WeaponDef {
   return WEAPONS.find((w) => w.id === id) ?? WEAPONS[0]
 }
@@ -190,8 +194,9 @@ export const RARITY_MIN_LEVEL: Record<Rarity, number> = {
   legendario: 10,
 }
 
-// Equipo automático: el arma y la armadura de cada clase mejoran solas al
-// subir de nivel, según la misma escala de rareza que las habilidades.
+// El arma se mejora a mano gastando oro (juntado en cofres); la armadura
+// sigue mejorando sola al subir de nivel, según la misma escala de rareza
+// que las habilidades.
 const CLASS_WEAPON_TIERS: Record<ClassId, Record<Rarity, string>> = {
   guerrero: { comun: 'espada_corta', raro: 'espada_rohirrim', epico: 'espada_marshal', legendario: 'hoja_helm' },
   enano: { comun: 'hacha_minero', raro: 'hacha_guardia', epico: 'hacha_khazad', legendario: 'hacha_durin' },
@@ -206,6 +211,13 @@ const ARMOR_TIERS: Record<Rarity, string> = {
   legendario: 'armadura_helm',
 }
 
+const RARITY_ORDER: Rarity[] = ['comun', 'raro', 'epico', 'legendario']
+
+export const WEAPON_MAX_TIER = RARITY_ORDER.length
+
+// costo en oro para pasar del tier N al N+1 (índice 0 = tier1 -> tier2, etc.)
+export const WEAPON_TIER_UPGRADE_COST = [60, 180, 450]
+
 export function tierForLevel(level: number): Rarity {
   if (level >= RARITY_MIN_LEVEL.legendario) return 'legendario'
   if (level >= RARITY_MIN_LEVEL.epico) return 'epico'
@@ -213,9 +225,10 @@ export function tierForLevel(level: number): Rarity {
   return 'comun'
 }
 
-export function weaponIdForClassLevel(classId: string, level: number): string {
+export function weaponIdForClassTier(classId: string, tier: number): string {
   const tiers = CLASS_WEAPON_TIERS[classId as ClassId] ?? CLASS_WEAPON_TIERS.guerrero
-  return tiers[tierForLevel(level)]
+  const clamped = Math.min(WEAPON_MAX_TIER, Math.max(1, tier))
+  return tiers[RARITY_ORDER[clamped - 1]]
 }
 
 export function armorIdForLevel(level: number): string {
