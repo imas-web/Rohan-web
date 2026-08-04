@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { ChestInstance, MissionDef, EnemyInstance, Vec2 } from './types'
-import { ENEMIES, enemyCountMultiplierForParty, getArmor, getWeapon, rewardMultiplierForParty, xpToNextLevel } from './data'
+import { ENEMIES, enemyCountMultiplierForParty, getArmor, getClass, getWeapon, rewardMultiplierForParty, xpToNextLevel } from './data'
 import { PLATFORMER_LEVEL } from './platformerLevel'
 import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supabase/multiplayer'
 import { drawBar, drawHumanoid } from './render'
@@ -9,14 +9,22 @@ import PlatformerControls from '../ui/PlatformerControls'
 
 const MOVE_SPEED = 230
 const MOVE_SPEED_Y = 170
-const CAMERA_ZOOM = 2.1 // acerca la cámara para que el carril angosto no deje tanto espacio muerto arriba/abajo
+const CAMERA_ZOOM = 1.05 // acerca un poco la cámara sin perder tanto campo de visión
 const CONTACT_RANGE = 30
-const CONTACT_COOLDOWN = 0.8
 const INVULN_DURATION = 1.4
 const START_LIVES = 3
 const ATTACK_SWING_DURATION = 0.135
 const GOAL_MARGIN = 40
 const ENEMY_SPAWN_DELAY = 0.4 // espera a que lleguen los primeros player_update de los compañeros antes de contar cuántos somos
+const ENEMY_AGGRO_RANGE = 260
+const ARROW_FLIGHT_TIME = 0.28
+
+interface ArrowVisual {
+  from: Vec2
+  to: Vec2
+  t: number
+  kind?: 'arrow' | 'bolt'
+}
 
 interface LocalPlatformer {
   id: string
@@ -158,6 +166,8 @@ export default function PlatformerCanvas({
   const collectedLocallyRef = useRef<Set<string>>(new Set())
   const floatingRef = useRef<FloatingText[]>([])
   const remoteSwingRef = useRef<Map<string, number>>(new Map())
+  const arrowsRef = useRef<ArrowVisual[]>([])
+  const pendingShotRef = useRef<{ fromX: number; fromY: number; toX: number; toY: number } | null>(null)
 
   const leftHeldRef = useRef(false)
   const rightHeldRef = useRef(false)
@@ -337,8 +347,35 @@ export default function PlatformerCanvas({
       const lp = localRef.current
       if (!lp.alive || lp.attackCooldownLeft > 0) return
       const weapon = getWeapon(lp.weaponId)
+      const cls = getClass(classId)
       lp.attackCooldownLeft = 1 / weapon.attackSpeed
       lp.attackAnim = ATTACK_SWING_DURATION
+
+      if (cls.ranged) {
+        // arco/bastón: un solo disparo al enemigo más cercano dentro del alcance
+        let nearestUid: string | null = null
+        let nearestE: EnemyInstance | null = null
+        let nearestD = Infinity
+        enemiesRef.current.forEach((e, uid) => {
+          const d = dist({ x: lp.x, y: lp.y }, e.pos)
+          if (d <= weapon.range && d < nearestD) {
+            nearestD = d
+            nearestUid = uid
+            nearestE = e
+          }
+        })
+        if (nearestUid && nearestE) {
+          const targetPos = (nearestE as EnemyInstance).pos
+          lp.facing = targetPos.x >= lp.x ? 1 : -1
+          const crit = Math.random() < weapon.critChance
+          const dmg = weapon.damage * (1 + lp.level * 0.025) * (crit ? 1.8 : 1)
+          arrowsRef.current.push({ from: { x: lp.x, y: lp.y }, to: { ...targetPos }, t: 0, kind: cls.weaponShape === 'staff' ? 'bolt' : 'arrow' })
+          if (isHostRef.current) applyHitToEnemy(nearestUid, dmg)
+          else room?.sendHitRequest({ enemyUid: nearestUid, damage: dmg, attackerId: lp.id, isCrit: crit })
+        }
+        return
+      }
+
       enemiesRef.current.forEach((e, uid) => {
         if (dist({ x: lp.x, y: lp.y }, e.pos) <= weapon.range) {
           const crit = Math.random() < weapon.critChance
@@ -388,7 +425,31 @@ export default function PlatformerCanvas({
       enemiesRef.current.forEach((e, uid) => {
         const def = ENEMIES[e.defId]
         const bounds = patrolBoundsRef.current.get(uid)
-        if (bounds) {
+
+        // busca al jugador vivo más cercano dentro del radio de agresión
+        let target: { id: string; pos: Vec2 } | null = null
+        let targetD = Infinity
+        for (const p of players) {
+          const d = dist(e.pos, p.pos)
+          if (d < targetD) {
+            targetD = d
+            target = p
+          }
+        }
+        const chasing = target && targetD <= ENEMY_AGGRO_RANGE
+        const attackRange = def.ranged ? def.attackRange : CONTACT_RANGE
+
+        if (chasing && target && targetD > attackRange) {
+          // persigue al jugador en vez de solo patrullar
+          const dirX = target.pos.x > e.pos.x ? 1 : -1
+          const targetX = e.pos.x + dirX * def.speed * dt
+          const boundMinX = bounds ? bounds.minX - 40 : 0
+          const boundMaxX = bounds ? bounds.maxX + 40 : level.width
+          e.pos.x = Math.min(boundMaxX, Math.max(boundMinX, targetX))
+          const dirY = target.pos.y > e.pos.y ? 1 : target.pos.y < e.pos.y ? -1 : 0
+          e.pos.y = Math.min(level.laneMaxY, Math.max(level.laneMinY, e.pos.y + dirY * def.speed * 0.6 * dt))
+          if (bounds) bounds.dir = dirX
+        } else if (bounds && !(chasing && target && targetD <= attackRange)) {
           e.pos.x += bounds.dir * def.speed * dt
           if (e.pos.x <= bounds.minX) {
             e.pos.x = bounds.minX
@@ -398,16 +459,17 @@ export default function PlatformerCanvas({
             bounds.dir = -1
           }
         }
+
         e.attackCooldownLeft -= dt
-        if (e.attackCooldownLeft <= 0) {
-          for (const p of players) {
-            if (dist(e.pos, p.pos) <= CONTACT_RANGE) {
-              e.attackCooldownLeft = CONTACT_COOLDOWN
-              if (p.id === localRef.current.id) applyDamageToLocal(def.damage)
-              else room?.sendPlayerDamage({ targetId: p.id, amount: def.damage })
-              break
-            }
+        if (e.attackCooldownLeft <= 0 && target && targetD <= attackRange) {
+          e.attackCooldownLeft = def.attackCooldown
+          if (def.ranged) {
+            const shot = { fromX: e.pos.x, fromY: e.pos.y, toX: target.pos.x, toY: target.pos.y }
+            pendingShotRef.current = shot
+            arrowsRef.current.push({ from: { x: shot.fromX, y: shot.fromY }, to: { x: shot.toX, y: shot.toY }, t: 0 })
           }
+          if (target.id === localRef.current.id) applyDamageToLocal(def.damage)
+          else room?.sendPlayerDamage({ targetId: target.id, amount: def.damage })
         }
         if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt)
       })
@@ -462,8 +524,18 @@ export default function PlatformerCanvas({
 
       if (room && isHostRef.current && ts - lastHostBroadcast > 100) {
         lastHostBroadcast = ts
-        room.sendEnemySync({ enemies: Array.from(enemiesRef.current.values()), chests: Array.from(chestsRef.current.values()) })
+        room.sendEnemySync({
+          enemies: Array.from(enemiesRef.current.values()),
+          chests: Array.from(chestsRef.current.values()),
+          lastShot: pendingShotRef.current ?? undefined,
+        })
+        pendingShotRef.current = null
       }
+
+      arrowsRef.current = arrowsRef.current.filter((a) => a.t < 1)
+      arrowsRef.current.forEach((a) => {
+        a.t = Math.min(1, a.t + dt / ARROW_FLIGHT_TIME)
+      })
 
       floatingRef.current = floatingRef.current.filter((f) => f.life > 0)
       floatingRef.current.forEach((f) => {
@@ -630,7 +702,13 @@ export default function PlatformerCanvas({
 
       // jugadores remotos
       remotePlayersRef.current.forEach((rp) => {
+        const wasAttacking = remoteSwingRef.current.has(rp.id)
         const swingT = getRemoteSwingT(rp.id, rp.attacking, dt)
+        const rpCls = getClass(rp.classId)
+        if (rp.attacking && !wasAttacking && rpCls.ranged) {
+          const to = { x: rp.pos.x + rp.facing.x * getWeapon(rp.weaponId).range, y: rp.pos.y }
+          arrowsRef.current.push({ from: { ...rp.pos }, to, t: 0, kind: rpCls.weaponShape === 'staff' ? 'bolt' : 'arrow' })
+        }
         const weapon = getWeapon(rp.weaponId)
         const rpSpriteOk = drawSprite(ctx, rp.id, rp.classId as SpriteKey, rp.pos, { x: rp.facing.x, y: 0 }, 18 * 3.4, false)
         if (!rpSpriteOk) {
@@ -667,6 +745,48 @@ export default function PlatformerCanvas({
       ctx.font = '11px Inter, sans-serif'
       ctx.textAlign = 'center'
       ctx.fillText(`${lp.name} (vos)`, lp.x, lp.y - 72)
+
+      // flechas / hechizos en vuelo
+      arrowsRef.current.forEach((a) => {
+        const x = a.from.x + (a.to.x - a.from.x) * a.t
+        const y = a.from.y + (a.to.y - a.from.y) * a.t
+        const angle = Math.atan2(a.to.y - a.from.y, a.to.x - a.from.x)
+        ctx.save()
+        ctx.translate(x, y)
+        ctx.rotate(angle)
+        if (a.kind === 'bolt') {
+          ctx.strokeStyle = 'rgba(138, 76, 155, 0.5)'
+          ctx.lineWidth = 6
+          ctx.beginPath()
+          ctx.moveTo(-16, 0)
+          ctx.lineTo(0, 0)
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.arc(4, 0, 5, 0, Math.PI * 2)
+          ctx.fillStyle = '#C9A9E0'
+          ctx.fill()
+          ctx.beginPath()
+          ctx.arc(4, 0, 8, 0, Math.PI * 2)
+          ctx.strokeStyle = 'rgba(138, 76, 155, 0.6)'
+          ctx.lineWidth = 2
+          ctx.stroke()
+        } else {
+          ctx.strokeStyle = '#D9CBA0'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.moveTo(-14, 0)
+          ctx.lineTo(8, 0)
+          ctx.stroke()
+          ctx.fillStyle = '#8A7A5C'
+          ctx.beginPath()
+          ctx.moveTo(8, 0)
+          ctx.lineTo(2, -3.5)
+          ctx.lineTo(2, 3.5)
+          ctx.closePath()
+          ctx.fill()
+        }
+        ctx.restore()
+      })
 
       floatingRef.current.forEach((f) => {
         ctx.globalAlpha = Math.max(0, Math.min(1, f.life))
@@ -725,6 +845,10 @@ export default function PlatformerCanvas({
         const chestMap = new Map<string, ChestInstance>()
         payload.chests.forEach((c) => chestMap.set(c.uid, c))
         chestsRef.current = chestMap
+      }
+      if (payload.lastShot) {
+        const s = payload.lastShot
+        arrowsRef.current.push({ from: { x: s.fromX, y: s.fromY }, to: { x: s.toX, y: s.toY }, t: 0 })
       }
     }
     listenersRef.current.onHitRequest = (p) => {
