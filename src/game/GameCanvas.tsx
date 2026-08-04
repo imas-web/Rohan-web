@@ -113,6 +113,9 @@ interface SceneTheme {
   floorColor: string
   floorGridColor: string
   accentColor: string
+  paintSpotColor: string
+  vignetteColor: string
+  moodWashColor: string
 }
 
 const SCENE_THEMES: Record<string, SceneTheme> = {
@@ -129,6 +132,9 @@ const SCENE_THEMES: Record<string, SceneTheme> = {
     floorColor: '#202D22',
     floorGridColor: 'rgba(210, 232, 210, 0.05)',
     accentColor: '#5FA98A',
+    paintSpotColor: 'rgba(95, 169, 138, 0.05)',
+    vignetteColor: '3, 12, 9',
+    moodWashColor: 'rgba(95, 169, 138, 0.05)',
   },
   defensa_muro: {
     bg: '#1A130D',
@@ -143,6 +149,9 @@ const SCENE_THEMES: Record<string, SceneTheme> = {
     floorColor: '#2B1F16',
     floorGridColor: 'rgba(232, 180, 140, 0.05)',
     accentColor: '#C1502E',
+    paintSpotColor: 'rgba(193, 80, 46, 0.06)',
+    vignetteColor: '20, 10, 4',
+    moodWashColor: 'rgba(193, 80, 46, 0.07)',
   },
   oleadas_cuerno: {
     bg: '#12111A',
@@ -157,6 +166,9 @@ const SCENE_THEMES: Record<string, SceneTheme> = {
     floorColor: '#221F2E',
     floorGridColor: 'rgba(200, 180, 232, 0.05)',
     accentColor: '#8A4C9B',
+    paintSpotColor: 'rgba(138, 76, 155, 0.06)',
+    vignetteColor: '10, 8, 16',
+    moodWashColor: 'rgba(138, 76, 155, 0.06)',
   },
 }
 
@@ -882,9 +894,22 @@ export default function GameCanvas({
       // Suelo con grilla sutil
       const grad = ctx.createRadialGradient(WORLD_W / 2, WORLD_H / 2, 100, WORLD_W / 2, WORLD_H / 2, WORLD_W * 0.8)
       grad.addColorStop(0, theme.groundIn)
+      grad.addColorStop(0.6, theme.groundIn)
       grad.addColorStop(1, theme.groundOut)
       ctx.fillStyle = grad
       ctx.fillRect(0, 0, WORLD_W, WORLD_H)
+      // manchas suaves de color para romper la uniformidad del piso, como
+      // si fuera una superficie pintada a mano y no un relleno plano
+      for (let i = 0; i < 24; i++) {
+        const px = (i * 337 + 60) % WORLD_W
+        const py = (i * 461 + 90) % WORLD_H
+        const r = 90 + (i % 4) * 40
+        const spot = ctx.createRadialGradient(px, py, 0, px, py, r)
+        spot.addColorStop(0, theme.paintSpotColor)
+        spot.addColorStop(1, 'rgba(0,0,0,0)')
+        ctx.fillStyle = spot
+        ctx.fillRect(px - r, py - r, r * 2, r * 2)
+      }
       ctx.strokeStyle = theme.gridColor
       ctx.lineWidth = 1
       for (let x = 0; x <= WORLD_W; x += 80) {
@@ -1071,6 +1096,16 @@ export default function GameCanvas({
       })
 
       ctx.restore()
+
+      // vignette + lavado de color en espacio de pantalla: le da profundidad
+      // y una atmósfera propia a cada misión en vez de un plano parejo
+      ctx.fillStyle = theme.moodWashColor
+      ctx.fillRect(0, 0, w, h)
+      const vignette = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.25, w / 2, h / 2, Math.max(w, h) * 0.72)
+      vignette.addColorStop(0, `rgba(${theme.vignetteColor}, 0)`)
+      vignette.addColorStop(1, `rgba(${theme.vignetteColor}, 0.55)`)
+      ctx.fillStyle = vignette
+      ctx.fillRect(0, 0, w, h)
     }
 
     function drawCrenellations(x: number, y: number, w: number, h: number, orientation: 'h' | 'v', outerSide: -1 | 1) {
@@ -1276,6 +1311,24 @@ export default function GameCanvas({
           { x: cx + CASTLE_R_OUT, y: cy + CASTLE_R_OUT },
         ].forEach((t) => {
           ctx.fillRect(t.x - 6, t.y + 20, 12, 34)
+        })
+        // haces de luz que caen desde grietas en el techo de la mazmorra
+        ;[
+          { x: cx - rIn * 0.5, a: 0.15 },
+          { x: cx + rIn * 0.55, a: 0.1 },
+        ].forEach((s) => {
+          const beamW = 70
+          const grad = ctx.createLinearGradient(s.x, cy - rIn, s.x + 40, cy + rIn)
+          grad.addColorStop(0, `rgba(201, 169, 224, ${s.a})`)
+          grad.addColorStop(1, 'rgba(201, 169, 224, 0)')
+          ctx.fillStyle = grad
+          ctx.beginPath()
+          ctx.moveTo(s.x - beamW * 0.15, cy - rIn)
+          ctx.lineTo(s.x + beamW * 0.15, cy - rIn)
+          ctx.lineTo(s.x + beamW * 0.7, cy + rIn)
+          ctx.lineTo(s.x - beamW * 0.7, cy + rIn)
+          ctx.closePath()
+          ctx.fill()
         })
       }
     }
