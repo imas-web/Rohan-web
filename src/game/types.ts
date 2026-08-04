@@ -98,7 +98,7 @@ export interface ProjectileInstance {
   ttl: number
 }
 
-export type GameMode = 'oleadas' | 'defensa' | 'mision'
+export type GameMode = 'oleadas' | 'defensa' | 'mision' | 'plataformas'
 
 export interface MissionDef {
   id: string

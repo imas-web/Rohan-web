@@ -3,6 +3,7 @@ import MainMenu from './ui/MainMenu'
 import Lobby from './ui/Lobby'
 import CampScreen, { type Progress } from './ui/CampScreen'
 import GameCanvas from './game/GameCanvas'
+import PlatformerCanvas from './game/PlatformerCanvas'
 import type { MissionDef } from './game/types'
 import { MultiplayerRoom, makePlayerId, type Listeners } from './supabase/multiplayer'
 
@@ -143,7 +144,23 @@ export default function App() {
         />
       )}
 
-      {screen === 'game' && mission && (
+      {screen === 'game' && mission && mission.mode === 'plataformas' && (
+        <PlatformerCanvas
+          mission={mission}
+          localName={name}
+          localColor={color}
+          weaponId={progress.weaponId}
+          armorId={progress.armorId}
+          startLevel={progress.level}
+          startXp={progress.xp}
+          startMaterials={progress.materials}
+          room={room}
+          listenersRef={listenersRef}
+          onExit={handleExit}
+        />
+      )}
+
+      {screen === 'game' && mission && mission.mode !== 'plataformas' && (
         <GameCanvas
           mission={mission}
           localName={name}

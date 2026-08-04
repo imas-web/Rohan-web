@@ -199,7 +199,15 @@ export default function CampScreen({
         <div className="mission-grid">
           {MISSIONS.map((m) => (
             <div key={m.id} className="mission-card">
-              <span className="mission-mode">{m.mode === 'oleadas' ? 'Oleadas + jefe' : m.mode === 'defensa' ? 'Defender base' : 'Misión'}</span>
+              <span className="mission-mode">
+                {m.mode === 'oleadas'
+                  ? 'Oleadas + jefe'
+                  : m.mode === 'defensa'
+                  ? 'Defender base'
+                  : m.mode === 'plataformas'
+                  ? 'Plataformas'
+                  : 'Misión'}
+              </span>
               <h3>{m.title}</h3>
               <p>{m.description}</p>
               <button className="btn-primary" disabled={!!room && !isHost} onClick={() => startMission(m)}>
