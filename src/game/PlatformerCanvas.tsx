@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { ChestInstance, MissionDef, EnemyInstance, Vec2 } from './types'
 import { ENEMIES, enemyCountMultiplierForParty, getArmor, getClass, getWeapon, rewardMultiplierForParty, xpToNextLevel } from './data'
-import { PLATFORMER_LEVEL, type PlatformerLevel } from './platformerLevel'
+import { PLATFORMER_LEVEL, FORK_EXTRA, FORK_GAP_HALF, type PlatformerLevel } from './platformerLevel'
 import { MultiplayerRoom, type NetPlayerUpdate, type Listeners } from '../supabase/multiplayer'
 import { drawBar, drawHumanoid } from './render'
 import { drawSprite, preloadSprites, type SpriteKey } from './sprites'
@@ -82,14 +82,35 @@ interface DetourZone {
   depth: number
 }
 
+interface Band {
+  minY: number
+  maxY: number
+}
+
 function allDetourZones(level: PlatformerLevel): DetourZone[] {
   return [...level.alcoves, ...level.blockades]
 }
 
+function forkAtX(level: PlatformerLevel, x: number) {
+  return level.forks.find((f) => x >= f.xStart && x <= f.xEnd) ?? null
+}
+
+// dentro de una fork el carril se parte en dos rutas paralelas (arriba y
+// abajo) separadas por una pared central — hay que elegir por cuál pasar.
+function forkBands(level: PlatformerLevel): Band[] {
+  const gy = (level.laneMinY + level.laneMaxY) / 2
+  return [
+    { minY: level.laneMinY - FORK_EXTRA, maxY: gy - FORK_GAP_HALF },
+    { minY: gy + FORK_GAP_HALF, maxY: level.laneMaxY + FORK_EXTRA },
+  ]
+}
+
 // el carril base es angosto, pero se ensancha localmente donde hay un hueco
 // (alcove hacia un cofre escondido, o un derrumbe/blockade que corta el
-// camino directo) — así el jugador tiene que desviarse del camino recto.
-function laneBoundsAtX(level: PlatformerLevel, x: number): { minY: number; maxY: number } {
+// camino directo), o se parte en dos bandas paralelas dentro de una fork —
+// así el jugador tiene que desviarse del camino recto o elegir una ruta.
+function laneBandsAtX(level: PlatformerLevel, x: number): Band[] {
+  if (forkAtX(level, x)) return forkBands(level)
   let minY = level.laneMinY
   let maxY = level.laneMaxY
   for (const a of allDetourZones(level)) {
@@ -98,16 +119,38 @@ function laneBoundsAtX(level: PlatformerLevel, x: number): { minY: number; maxY:
       else maxY = Math.max(maxY, level.laneMaxY + a.depth)
     }
   }
-  return { minY, maxY }
+  return [{ minY, maxY }]
+}
+
+// agarra la banda válida más cercana a la y deseada (si ya está en una
+// banda no la mueve; si no, la manda al borde más cercano)
+function clampYToBands(bands: Band[], intendedY: number): number {
+  for (const b of bands) {
+    if (intendedY >= b.minY && intendedY <= b.maxY) return intendedY
+  }
+  let best = bands[0].minY
+  let bestD = Infinity
+  for (const b of bands) {
+    const clamped = Math.min(b.maxY, Math.max(b.minY, intendedY))
+    const d = Math.abs(clamped - intendedY)
+    if (d < bestD) {
+      bestD = d
+      best = clamped
+    }
+  }
+  return best
 }
 
 // segmentos del borde del carril en un lado dado, con "cortes" donde hay un
-// hueco lateral — para no dibujar una línea de pared cruzando la abertura
+// hueco lateral o una fork — para no dibujar una línea de pared cruzando la
+// abertura o la bifurcación
 function laneBorderSegments(level: PlatformerLevel, side: 'up' | 'down'): [number, number][] {
-  const gaps = allDetourZones(level)
-    .filter((a) => a.side === side)
-    .map((a): [number, number] => [a.x - a.halfWidth, a.x + a.halfWidth])
-    .sort((a, b) => a[0] - b[0])
+  const gaps = [
+    ...allDetourZones(level)
+      .filter((a) => a.side === side)
+      .map((a): [number, number] => [a.x - a.halfWidth, a.x + a.halfWidth]),
+    ...level.forks.map((f): [number, number] => [f.xStart, f.xEnd]),
+  ].sort((a, b) => a[0] - b[0])
   const segments: [number, number][] = []
   let cursor = 0
   gaps.forEach(([gx0, gx1]) => {
@@ -462,8 +505,8 @@ export default function PlatformerCanvas({
       if (upHeldRef.current) moveDirY -= 1
       if (downHeldRef.current) moveDirY += 1
       lp.vy = moveDirY * MOVE_SPEED_Y
-      const yBounds = laneBoundsAtX(level, lp.x)
-      lp.y = Math.min(yBounds.maxY, Math.max(yBounds.minY, lp.y + lp.vy * dt))
+      const bands = laneBandsAtX(level, lp.x)
+      lp.y = clampYToBands(bands, lp.y + lp.vy * dt)
 
       tryCollectChests()
 
@@ -509,7 +552,8 @@ export default function PlatformerCanvas({
           const boundMaxX = bounds ? bounds.maxX + 40 : level.width
           e.pos.x = Math.min(boundMaxX, Math.max(boundMinX, targetX))
           const dirY = target.pos.y > e.pos.y ? 1 : target.pos.y < e.pos.y ? -1 : 0
-          e.pos.y = Math.min(level.laneMaxY, Math.max(level.laneMinY, e.pos.y + dirY * def.speed * 0.6 * dt))
+          const enemyYBands = forkAtX(level, e.pos.x) ? forkBands(level) : [{ minY: level.laneMinY, maxY: level.laneMaxY }]
+          e.pos.y = clampYToBands(enemyYBands, e.pos.y + dirY * def.speed * 0.6 * dt)
           if (bounds) bounds.dir = dirX
         } else if (bounds && !(chasing && target && targetD <= attackRange)) {
           e.pos.x += bounds.dir * def.speed * dt
@@ -654,13 +698,14 @@ export default function PlatformerCanvas({
       ctx.fillStyle = 'rgba(90, 80, 60, 0.5)'
       for (let x = 0; x < level.width; x += 90) {
         const jitter = (x * 37) % 30
-        const inUpZone = detourZones.some((a) => a.side === 'up' && Math.abs(x + jitter - a.x) < a.halfWidth)
+        const inUpZone = detourZones.some((a) => a.side === 'up' && Math.abs(x + jitter - a.x) < a.halfWidth) || forkAtX(level, x + jitter)
         if (!inUpZone) {
           ctx.beginPath()
           ctx.arc(x + jitter, level.laneMinY - wallH * 0.35, 26, 0, Math.PI * 2)
           ctx.fill()
         }
-        const inDownZone = detourZones.some((a) => a.side === 'down' && Math.abs(x + 45 - jitter - a.x) < a.halfWidth)
+        const inDownZone =
+          detourZones.some((a) => a.side === 'down' && Math.abs(x + 45 - jitter - a.x) < a.halfWidth) || forkAtX(level, x + 45 - jitter)
         if (!inDownZone) {
           ctx.beginPath()
           ctx.arc(x + 45 - jitter, level.laneMaxY + wallH * 0.35, 26, 0, Math.PI * 2)
@@ -721,13 +766,56 @@ export default function PlatformerCanvas({
           ctx.stroke()
         }
       })
+
+      // forks: el carril se abre en dos rutas paralelas separadas por una
+      // pared central de roca — hay que elegir por cuál pasar
+      level.forks.forEach((f) => {
+        const gy = (level.laneMinY + level.laneMaxY) / 2
+        const upperMax = gy - FORK_GAP_HALF
+        const lowerMin = gy + FORK_GAP_HALF
+        const outerMinY = level.laneMinY - FORK_EXTRA
+        const outerMaxY = level.laneMaxY + FORK_EXTRA
+        ctx.fillStyle = '#3A3226'
+        ctx.fillRect(f.xStart, outerMinY, f.xEnd - f.xStart, upperMax - outerMinY)
+        ctx.fillRect(f.xStart, lowerMin, f.xEnd - f.xStart, outerMaxY - lowerMin)
+        ctx.fillStyle = '#241C14'
+        ctx.fillRect(f.xStart, upperMax, f.xEnd - f.xStart, lowerMin - upperMax)
+        ctx.fillStyle = 'rgba(90, 80, 60, 0.5)'
+        for (let x = f.xStart + 20; x < f.xEnd; x += 46) {
+          ctx.beginPath()
+          ctx.arc(x, gy, 12, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)'
+        ctx.lineWidth = 5
+        ;[
+          [outerMinY, upperMax],
+          [lowerMin, outerMaxY],
+        ].forEach(([by0, by1]) => {
+          ctx.beginPath()
+          ctx.moveTo(f.xStart, by0)
+          ctx.lineTo(f.xEnd, by0)
+          ctx.moveTo(f.xStart, by1)
+          ctx.lineTo(f.xEnd, by1)
+          ctx.stroke()
+        })
+        // marca de entrada: dos flechas que se abren, para que se note la bifurcación
+        ctx.strokeStyle = 'rgba(201,162,39,0.55)'
+        ctx.lineWidth = 3
+        ctx.beginPath()
+        ctx.moveTo(f.xStart - 10, gy)
+        ctx.lineTo(f.xStart + 20, (outerMinY + upperMax) / 2)
+        ctx.moveTo(f.xStart - 10, gy)
+        ctx.lineTo(f.xStart + 20, (lowerMin + outerMaxY) / 2)
+        ctx.stroke()
+      })
     }
 
     function drawWallTorches() {
       const detourZones = allDetourZones(level)
       const flicker = 0.55 + Math.sin(performance.now() / 150) * 0.2
       for (let x = 140; x < level.width; x += 260) {
-        const nearZone = detourZones.some((z) => Math.abs(x - z.x) < z.halfWidth + 30)
+        const nearZone = detourZones.some((z) => Math.abs(x - z.x) < z.halfWidth + 30) || forkAtX(level, x)
         if (nearZone) continue
         ;[level.laneMinY, level.laneMaxY].forEach((wallY, i) => {
           const dir = i === 0 ? -1 : 1
@@ -753,7 +841,7 @@ export default function PlatformerCanvas({
       for (let x = 40; x < level.width; x += 70) {
         const seed = (x * 71) % 233
         const fy = level.laneMinY + 14 + (seed % (level.laneMaxY - level.laneMinY - 28))
-        const nearZone = detourZones.some((z) => Math.abs(x - z.x) < z.halfWidth + 20)
+        const nearZone = detourZones.some((z) => Math.abs(x - z.x) < z.halfWidth + 20) || forkAtX(level, x)
         if (nearZone) continue
         if (seed % 3 === 0) {
           ctx.fillStyle = 'rgba(90, 110, 70, 0.35)'

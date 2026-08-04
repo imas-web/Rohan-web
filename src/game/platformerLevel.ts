@@ -31,6 +31,14 @@ export interface Blockade {
   depth: number
 }
 
+// una Fork parte el carril en DOS caminos paralelos (arriba/abajo) separados
+// por una pared de roca en el medio, que vuelven a juntarse al final del
+// tramo — una ruta real a elegir, no un callejón sin salida.
+export interface Fork {
+  xStart: number
+  xEnd: number
+}
+
 export interface PlatformerLevel {
   width: number
   laneMinY: number
@@ -39,6 +47,7 @@ export interface PlatformerLevel {
   enemies: PlatformEnemySpawn[]
   alcoves: Alcove[]
   blockades: Blockade[]
+  forks: Fork[]
   chests: ChestSpawn[]
   goal: Vec2
   startPos: Vec2
@@ -47,82 +56,130 @@ export interface PlatformerLevel {
 // carril de pelea estilo beat 'em up (tipo TMNT arcade): sin salto ni pozos,
 // te movés a lo largo del camino y un poco de profundidad (arriba/abajo)
 // para esquivar y rodear enemigos. Algunos cofres están escondidos en huecos
-// laterales (el carril se ensancha en ese tramo) para que no sea todo recto.
+// laterales (el carril se ensancha en ese tramo) para que no sea todo recto,
+// y en algunos tramos el camino se parte en dos rutas paralelas a elegir.
 const GY = 520 // centro del carril
 const LANE_HALF = 75
 const ALCOVE_DEPTH = 90
 const ALCOVE_HALF_WIDTH = 60
 
+// --- geometría base, en coordenadas "originales" (antes de abrir las forks) ---
+
+const RAW_ENEMIES: PlatformEnemySpawn[] = [
+  { defId: 'orco_explorador', x: 480, y: GY - 40, minX: 440, maxX: 560 },
+  { defId: 'orco_explorador', x: 560, y: GY + 40, minX: 500, maxX: 640 },
+  { defId: 'orco_guerrero', x: 780, y: GY, minX: 720, maxX: 860 },
+  { defId: 'orco_explorador', x: 980, y: GY - 30, minX: 920, maxX: 1040 },
+  { defId: 'orco_guerrero', x: 1180, y: GY + 30, minX: 1120, maxX: 1260 },
+  { defId: 'berserker_uruk', x: 1380, y: GY, minX: 1320, maxX: 1440 },
+  { defId: 'orco_explorador', x: 1580, y: GY - 40, minX: 1520, maxX: 1660 },
+  { defId: 'orco_explorador', x: 1650, y: GY + 40, minX: 1600, maxX: 1740 },
+  { defId: 'orco_guerrero', x: 1900, y: GY, minX: 1840, maxX: 1980 },
+  { defId: 'arquero_uruk', x: 2150, y: GY - 30, minX: 2100, maxX: 2100 },
+  { defId: 'orco_guerrero', x: 2300, y: GY + 30, minX: 2240, maxX: 2380 },
+  { defId: 'berserker_uruk', x: 2480, y: GY, minX: 2420, maxX: 2560 },
+  { defId: 'orco_explorador', x: 2650, y: GY - 40, minX: 2600, maxX: 2720 },
+  { defId: 'orco_guerrero', x: 2850, y: GY + 20, minX: 2790, maxX: 2930 },
+  { defId: 'orco_explorador', x: 3000, y: GY - 20, minX: 2950, maxX: 3070 },
+  { defId: 'arquero_uruk', x: 3200, y: GY + 40, minX: 3200, maxX: 3200 },
+  { defId: 'orco_guerrero', x: 3400, y: GY, minX: 3340, maxX: 3480 },
+  { defId: 'berserker_uruk', x: 3600, y: GY - 30, minX: 3540, maxX: 3680 },
+  { defId: 'orco_guerrero', x: 3750, y: GY + 30, minX: 3690, maxX: 3830 },
+]
+
+// muchos callejones sin salida: cada uno tiene su hueco correspondiente en
+// la pared en la misma x (el camino obvio hacia él) y termina en un cofre —
+// hay que abandonar el camino recto y después volver sobre tus pasos.
+const RAW_ALCOVES: Alcove[] = [
+  { x: 180, halfWidth: 55, side: 'up', depth: 100 },
+  { x: 350, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
+  { x: 650, halfWidth: 65, side: 'down', depth: 130 },
+  { x: 900, halfWidth: ALCOVE_HALF_WIDTH, side: 'down', depth: ALCOVE_DEPTH },
+  { x: 1150, halfWidth: 55, side: 'up', depth: 110 },
+  { x: 1450, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
+  { x: 1750, halfWidth: 70, side: 'down', depth: 150 },
+  { x: 2000, halfWidth: ALCOVE_HALF_WIDTH, side: 'down', depth: ALCOVE_DEPTH },
+  { x: 2220, halfWidth: 55, side: 'up', depth: 110 },
+  { x: 2550, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
+  { x: 2750, halfWidth: 65, side: 'down', depth: 130 },
+  { x: 3100, halfWidth: ALCOVE_HALF_WIDTH, side: 'down', depth: ALCOVE_DEPTH },
+  { x: 3450, halfWidth: 60, side: 'up', depth: 120 },
+  { x: 3650, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
+  { x: 3950, halfWidth: 70, side: 'down', depth: 140 },
+]
+
+// derrumbes que cortan el carril principal: para pasar hay que meterse en
+// el hueco lateral (más difícil todavía si hay un orco cerca vigilándolo)
+const RAW_BLOCKADES: Blockade[] = [
+  { x: 1300, halfWidth: 50, side: 'down', depth: 110 },
+  { x: 2400, halfWidth: 45, side: 'down', depth: 110 },
+  { x: 3250, halfWidth: 50, side: 'up', depth: 110 },
+]
+
+const RAW_CHESTS: ChestSpawn[] = [
+  { x: 180, y: GY - LANE_HALF - 100 + 20, gold: 15 },
+  { x: 350, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 20 },
+  { x: 650, y: GY + LANE_HALF + 130 - 20, gold: 25 },
+  { x: 900, y: GY + LANE_HALF + ALCOVE_DEPTH - 20, gold: 20 },
+  { x: 1150, y: GY - LANE_HALF - 110 + 20, gold: 25 },
+  { x: 1450, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 25 },
+  { x: 1750, y: GY + LANE_HALF + 150 - 20, gold: 35 },
+  { x: 2000, y: GY + LANE_HALF + ALCOVE_DEPTH - 20, gold: 20 },
+  { x: 2220, y: GY - LANE_HALF - 110 + 20, gold: 25 },
+  { x: 2550, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 25 },
+  { x: 2750, y: GY + LANE_HALF + 130 - 20, gold: 30 },
+  { x: 3100, y: GY + LANE_HALF + ALCOVE_DEPTH - 20, gold: 25 },
+  { x: 3450, y: GY - LANE_HALF - 120 + 20, gold: 30 },
+  { x: 3650, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 30 },
+  { x: 3950, y: GY + LANE_HALF + 140 - 20, gold: 35 },
+]
+
+const RAW_CHECKPOINTS = [70, 1050, 2100, 3150]
+const RAW_GOAL_X = 4130
+
+// puntos donde el camino se parte en dos rutas paralelas: todo lo que en la
+// geometría original está después de "afterX" se corre "width" píxeles para
+// hacerle lugar a la bifurcación — así no hay que recalcular a mano cada
+// posición del resto del nivel.
+const FORK_INSERTIONS: { afterX: number; width: number }[] = [
+  { afterX: 800, width: 380 },
+  { afterX: 2100, width: 380 },
+  { afterX: 3400, width: 380 },
+]
+
+export const FORK_EXTRA = 60 // cuánto se ensancha cada ruta hacia afuera
+export const FORK_GAP_HALF = 20 // mitad del grosor de la pared central
+
+function shiftX(x: number): number {
+  return x + FORK_INSERTIONS.reduce((acc, f) => acc + (x > f.afterX ? f.width : 0), 0)
+}
+
+const goalX = shiftX(RAW_GOAL_X)
+
+// además de los cofres escondidos en callejones sin salida, cada bifurcación
+// premia una de las dos rutas con un cofre extra (para que valga la pena
+// explorar las dos, no solo apurarse por la más corta)
+const forkChests: ChestSpawn[] = FORK_INSERTIONS.map((f, i) => {
+  const xStart = shiftX(f.afterX)
+  const cx = xStart + f.width / 2
+  const upperBand = i % 2 === 1
+  const y = upperBand ? GY - LANE_HALF - FORK_EXTRA / 2 : GY + LANE_HALF + FORK_EXTRA / 2
+  return { x: cx, y, gold: 25 }
+})
+
 export const PLATFORMER_LEVEL: PlatformerLevel = {
-  width: 4200,
+  width: goalX + 70,
   laneMinY: GY - LANE_HALF,
   laneMaxY: GY + LANE_HALF,
   startPos: { x: 70, y: GY },
-  checkpoints: [70, 1050, 2100, 3150],
-  enemies: [
-    { defId: 'orco_explorador', x: 480, y: GY - 40, minX: 440, maxX: 560 },
-    { defId: 'orco_explorador', x: 560, y: GY + 40, minX: 500, maxX: 640 },
-    { defId: 'orco_guerrero', x: 780, y: GY, minX: 720, maxX: 860 },
-    { defId: 'orco_explorador', x: 980, y: GY - 30, minX: 920, maxX: 1040 },
-    { defId: 'orco_guerrero', x: 1180, y: GY + 30, minX: 1120, maxX: 1260 },
-    { defId: 'berserker_uruk', x: 1380, y: GY, minX: 1320, maxX: 1440 },
-    { defId: 'orco_explorador', x: 1580, y: GY - 40, minX: 1520, maxX: 1660 },
-    { defId: 'orco_explorador', x: 1650, y: GY + 40, minX: 1600, maxX: 1740 },
-    { defId: 'orco_guerrero', x: 1900, y: GY, minX: 1840, maxX: 1980 },
-    { defId: 'arquero_uruk', x: 2150, y: GY - 30, minX: 2100, maxX: 2100 },
-    { defId: 'orco_guerrero', x: 2300, y: GY + 30, minX: 2240, maxX: 2380 },
-    { defId: 'berserker_uruk', x: 2480, y: GY, minX: 2420, maxX: 2560 },
-    { defId: 'orco_explorador', x: 2650, y: GY - 40, minX: 2600, maxX: 2720 },
-    { defId: 'orco_guerrero', x: 2850, y: GY + 20, minX: 2790, maxX: 2930 },
-    { defId: 'orco_explorador', x: 3000, y: GY - 20, minX: 2950, maxX: 3070 },
-    { defId: 'arquero_uruk', x: 3200, y: GY + 40, minX: 3200, maxX: 3200 },
-    { defId: 'orco_guerrero', x: 3400, y: GY, minX: 3340, maxX: 3480 },
-    { defId: 'berserker_uruk', x: 3600, y: GY - 30, minX: 3540, maxX: 3680 },
-    { defId: 'orco_guerrero', x: 3750, y: GY + 30, minX: 3690, maxX: 3830 },
-  ],
-  // muchos callejones sin salida: cada uno tiene su hueco correspondiente en
-  // la pared en la misma x (el camino obvio hacia él) y termina en un cofre —
-  // hay que abandonar el camino recto y después volver sobre tus pasos.
-  alcoves: [
-    { x: 180, halfWidth: 55, side: 'up', depth: 100 },
-    { x: 350, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
-    { x: 650, halfWidth: 65, side: 'down', depth: 130 },
-    { x: 900, halfWidth: ALCOVE_HALF_WIDTH, side: 'down', depth: ALCOVE_DEPTH },
-    { x: 1150, halfWidth: 55, side: 'up', depth: 110 },
-    { x: 1450, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
-    { x: 1750, halfWidth: 70, side: 'down', depth: 150 },
-    { x: 2000, halfWidth: ALCOVE_HALF_WIDTH, side: 'down', depth: ALCOVE_DEPTH },
-    { x: 2220, halfWidth: 55, side: 'up', depth: 110 },
-    { x: 2550, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
-    { x: 2750, halfWidth: 65, side: 'down', depth: 130 },
-    { x: 3100, halfWidth: ALCOVE_HALF_WIDTH, side: 'down', depth: ALCOVE_DEPTH },
-    { x: 3450, halfWidth: 60, side: 'up', depth: 120 },
-    { x: 3650, halfWidth: ALCOVE_HALF_WIDTH, side: 'up', depth: ALCOVE_DEPTH },
-    { x: 3950, halfWidth: 70, side: 'down', depth: 140 },
-  ],
-  // derrumbes que cortan el carril principal: para pasar hay que meterse en
-  // el hueco lateral (más difícil todavía si hay un orco cerca vigilándolo)
-  blockades: [
-    { x: 1300, halfWidth: 50, side: 'down', depth: 110 },
-    { x: 2400, halfWidth: 45, side: 'down', depth: 110 },
-    { x: 3250, halfWidth: 50, side: 'up', depth: 110 },
-  ],
-  chests: [
-    { x: 180, y: GY - LANE_HALF - 100 + 20, gold: 15 },
-    { x: 350, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 20 },
-    { x: 650, y: GY + LANE_HALF + 130 - 20, gold: 25 },
-    { x: 900, y: GY + LANE_HALF + ALCOVE_DEPTH - 20, gold: 20 },
-    { x: 1150, y: GY - LANE_HALF - 110 + 20, gold: 25 },
-    { x: 1450, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 25 },
-    { x: 1750, y: GY + LANE_HALF + 150 - 20, gold: 35 },
-    { x: 2000, y: GY + LANE_HALF + ALCOVE_DEPTH - 20, gold: 20 },
-    { x: 2220, y: GY - LANE_HALF - 110 + 20, gold: 25 },
-    { x: 2550, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 25 },
-    { x: 2750, y: GY + LANE_HALF + 130 - 20, gold: 30 },
-    { x: 3100, y: GY + LANE_HALF + ALCOVE_DEPTH - 20, gold: 25 },
-    { x: 3450, y: GY - LANE_HALF - 120 + 20, gold: 30 },
-    { x: 3650, y: GY - LANE_HALF - ALCOVE_DEPTH + 20, gold: 30 },
-    { x: 3950, y: GY + LANE_HALF + 140 - 20, gold: 35 },
-  ],
-  goal: { x: 4130, y: GY },
+  checkpoints: RAW_CHECKPOINTS.map(shiftX),
+  enemies: RAW_ENEMIES.map((e) => ({ ...e, x: shiftX(e.x), minX: shiftX(e.minX), maxX: shiftX(e.maxX) })),
+  alcoves: RAW_ALCOVES.map((a) => ({ ...a, x: shiftX(a.x) })),
+  blockades: RAW_BLOCKADES.map((b) => ({ ...b, x: shiftX(b.x) })),
+  forks: FORK_INSERTIONS.map((f) => {
+    const xStart = shiftX(f.afterX)
+    return { xStart, xEnd: xStart + f.width }
+  }),
+  chests: [...RAW_CHESTS.map((c) => ({ ...c, x: shiftX(c.x) })), ...forkChests],
+  goal: { x: goalX, y: GY },
 }
