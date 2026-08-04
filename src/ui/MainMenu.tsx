@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CLASSES, defaultAbilityForClass, getAbility } from '../game/data'
+import type { Progress } from './CampScreen'
 
 const COLORS = ['#7FD1AE', '#C1502E', '#4C6B8A', '#C9A227', '#8A4C9B', '#D97F5A']
 
@@ -7,14 +8,18 @@ export default function MainMenu({
   initialName,
   initialColor,
   initialClassId,
+  progress,
   onSolo,
   onMultiplayer,
+  onNewGame,
 }: {
   initialName: string
   initialColor: string
   initialClassId: string
+  progress: Progress
   onSolo: (name: string, color: string, classId: string) => void
   onMultiplayer: (name: string, color: string, classId: string) => void
+  onNewGame: () => void
 }) {
   const [name, setName] = useState(initialName || '')
   const [color, setColor] = useState(initialColor || COLORS[0])
@@ -22,6 +27,13 @@ export default function MainMenu({
 
   const canPlay = name.trim().length >= 2
   const selectedClass = CLASSES.find((c) => c.id === classId) ?? CLASSES[0]
+  const hasProgress = progress.level > 1 || progress.xp > 0 || progress.materials > 0 || progress.unlockedAbilityIds.length > 1
+
+  function handleNewGame() {
+    if (window.confirm('¿Seguro que querés empezar una partida nueva? Vas a perder todo tu progreso (nivel, equipo y habilidades) y volver a nivel 1.')) {
+      onNewGame()
+    }
+  }
 
   return (
     <div className="screen menu-screen">
@@ -30,6 +42,16 @@ export default function MainMenu({
         <h1>Guardia de Rohan</h1>
         <p className="menu-tagline">Defendé la Marca. Subí de nivel. Forjá tu equipo.</p>
       </div>
+
+      {hasProgress && (
+        <div className="menu-card save-banner">
+          <div>
+            <span className="eyebrow">Partida guardada</span>
+            <p className="hint">Nivel {progress.level} · ◆ {progress.materials} materiales</p>
+          </div>
+          <button className="btn-ghost" onClick={handleNewGame}>Nueva partida</button>
+        </div>
+      )}
 
       <div className="menu-card">
         <label className="field-label" htmlFor="name">Tu nombre de guerrero</label>

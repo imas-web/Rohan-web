@@ -74,6 +74,17 @@ export default function App() {
     persistSave({ name, color, classId, ...progress })
   }, [name, color, classId, progress])
 
+  function handleNewGame() {
+    setProgress({
+      level: 1,
+      xp: 0,
+      materials: 0,
+      ultimateRank: 1,
+      activeAbilityId: defaultAbilityForClass(classId),
+      unlockedAbilityIds: [defaultAbilityForClass(classId)],
+    })
+  }
+
   function applyClassChoice(cls: string) {
     if (cls === classId) return
     setClassId(cls)
@@ -143,8 +154,10 @@ export default function App() {
           initialName={name}
           initialColor={color}
           initialClassId={classId}
+          progress={progress}
           onSolo={handleSolo}
           onMultiplayer={handleMultiplayer}
+          onNewGame={handleNewGame}
         />
       )}
 
