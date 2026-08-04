@@ -27,43 +27,51 @@ export interface PlatformerLevel {
 
 const GY = 520 // superficie del suelo
 
-// Suelo grueso (se extiende bien hacia abajo para que nunca se vea el borde
-// inferior) partido por pozos, más algunas plataformas flotantes finas.
+// Con velocidad 230px/s y salto de 720px/s contra una gravedad de 1900px/s²,
+// el salto a máxima carrera cubre ~174px de distancia horizontal — los pozos
+// de 100-120px exigen tomar carrera y saltar con buen timing, no son gratis.
 export const PLATFORMER_LEVEL: PlatformerLevel = {
-  width: 3650,
+  width: 4200,
   fallDeathY: GY + 260,
   startPos: { x: 70, y: GY },
   platforms: [
     { x: 0, y: GY, w: 480, h: 400 },
-    // pozo 480-560
-    { x: 560, y: GY, w: 420, h: 400 },
-    // pozo 980-1060
-    { x: 1060, y: GY, w: 200, h: 400 },
-    // escalera flotante sobre un vacío (1260-1780)
-    { x: 1300, y: GY - 60, w: 120, h: 20 },
-    { x: 1460, y: GY - 120, w: 120, h: 20 },
-    { x: 1620, y: GY - 60, w: 160, h: 20 },
-    { x: 1780, y: GY, w: 380, h: 400 },
-    // pozo 2160-2240
-    { x: 2240, y: GY, w: 360, h: 400 },
-    // pozo 2600-2680
-    { x: 2680, y: GY, w: 400, h: 400 },
-    { x: 3080, y: GY, w: 570, h: 400 },
+    // pozo 480-590
+    { x: 590, y: GY, w: 390, h: 400 },
+    // pozo 980-1090
+    { x: 1090, y: GY, w: 170, h: 400 },
+    // escalera flotante, angosta y alta, sobre un vacío largo (1260-1820)
+    { x: 1300, y: GY - 60, w: 100, h: 20 },
+    { x: 1450, y: GY - 130, w: 100, h: 20 },
+    { x: 1610, y: GY - 70, w: 90, h: 20 },
+    { x: 1820, y: GY, w: 380, h: 400 },
+    // pozo 2200-2310
+    { x: 2310, y: GY, w: 290, h: 400 },
+    // pozo 2600-2710
+    { x: 2710, y: GY, w: 390, h: 400 },
+    // pozo 3100-3210
+    { x: 3210, y: GY, w: 290, h: 400 },
+    // pozo 3500-3600
+    { x: 3600, y: GY, w: 600, h: 400 },
   ],
   checkpoints: [
     { x: 70, y: GY },
-    { x: 1820, y: GY },
-    { x: 2720, y: GY },
+    { x: 1860, y: GY },
+    { x: 2750, y: GY },
+    { x: 3250, y: GY },
   ],
   enemies: [
     { defId: 'orco_explorador', x: 660, y: GY, minX: 620, maxX: 740 },
-    { defId: 'orco_guerrero', x: 880, y: GY, minX: 830, maxX: 950 },
-    { defId: 'orco_explorador', x: 1830, y: GY, minX: 1800, maxX: 1880 },
-    { defId: 'orco_guerrero', x: 1980, y: GY, minX: 1940, maxX: 2020 },
-    { defId: 'orco_explorador', x: 2110, y: GY, minX: 2080, maxX: 2150 },
-    { defId: 'orco_guerrero', x: 2520, y: GY, minX: 2470, maxX: 2570 },
-    { defId: 'orco_explorador', x: 2760, y: GY, minX: 2720, maxX: 2810 },
-    { defId: 'orco_guerrero', x: 2940, y: GY, minX: 2900, maxX: 3020 },
+    { defId: 'orco_guerrero', x: 880, y: GY, minX: 850, maxX: 960 },
+    { defId: 'orco_explorador', x: 1870, y: GY, minX: 1840, maxX: 1930 },
+    { defId: 'orco_guerrero', x: 2050, y: GY, minX: 2010, maxX: 2100 },
+    { defId: 'berserker_uruk', x: 2160, y: GY, minX: 2130, maxX: 2190 },
+    { defId: 'orco_guerrero', x: 2500, y: GY, minX: 2450, maxX: 2580 },
+    { defId: 'orco_explorador', x: 2790, y: GY, minX: 2760, maxX: 2850 },
+    { defId: 'orco_guerrero', x: 2940, y: GY, minX: 2900, maxX: 2990 },
+    { defId: 'orco_explorador', x: 3060, y: GY, minX: 3030, maxX: 3100 },
+    { defId: 'berserker_uruk', x: 3300, y: GY, minX: 3260, maxX: 3360 },
+    { defId: 'orco_guerrero', x: 3430, y: GY, minX: 3400, maxX: 3480 },
   ],
-  goal: { x: 3580, y: GY },
+  goal: { x: 4130, y: GY },
 }
