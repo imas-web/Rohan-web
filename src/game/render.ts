@@ -23,9 +23,10 @@ export function drawBar(
 
 export interface HumanoidExtras {
   horns?: boolean
+  tusks?: boolean
   crown?: boolean
+  beard?: boolean
   shield?: boolean
-  bow?: boolean
   weaponShape?: WeaponShape
   legendary?: boolean
   swingT?: number
@@ -98,6 +99,40 @@ export function drawHumanoid(
     c.fill()
   }
 
+  if (extras.tusks) {
+    // mandíbula prominente y colmillos, para que se lea claramente "orco"
+    c.fillStyle = flash ? '#FFFFFF' : headColor
+    c.beginPath()
+    c.ellipse(headX, headY + headR * 0.55, headR * 0.85, headR * 0.4, 0, 0, Math.PI)
+    c.fill()
+    c.fillStyle = '#E8DFC8'
+    c.beginPath()
+    c.moveTo(headX - headR * 0.5, headY + headR * 0.55)
+    c.lineTo(headX - headR * 0.62, headY + headR * 1.05)
+    c.lineTo(headX - headR * 0.28, headY + headR * 0.62)
+    c.closePath()
+    c.fill()
+    c.beginPath()
+    c.moveTo(headX + headR * 0.5, headY + headR * 0.55)
+    c.lineTo(headX + headR * 0.62, headY + headR * 1.05)
+    c.lineTo(headX + headR * 0.28, headY + headR * 0.62)
+    c.closePath()
+    c.fill()
+  }
+
+  if (extras.beard) {
+    c.fillStyle = flash ? '#FFFFFF' : '#D9CBA0'
+    c.beginPath()
+    c.moveTo(headX - headR * 0.7, headY + headR * 0.25)
+    c.lineTo(headX, headY + headR * 1.5)
+    c.lineTo(headX + headR * 0.7, headY + headR * 0.25)
+    c.closePath()
+    c.fill()
+    c.strokeStyle = outlineColor
+    c.lineWidth = 1
+    c.stroke()
+  }
+
   if (extras.crown) {
     c.fillStyle = '#C9A227'
     for (let i = -1; i <= 1; i++) {
@@ -113,12 +148,13 @@ export function drawHumanoid(
   // arma / arco, rotado según hacia dónde mira (y con arco de golpe si está atacando)
   const angle = Math.atan2(dir.y, dir.x)
   const swingT = extras.swingT ?? 0
-  const swingOffset = extras.bow ? 0 : Math.sin(swingT * Math.PI) * ATTACK_SWING_MAX_ANGLE
+  const isBow = extras.weaponShape === 'bow'
+  const swingOffset = isBow ? 0 : Math.sin(swingT * Math.PI) * ATTACK_SWING_MAX_ANGLE
   c.save()
   c.translate(pos.x, pos.y)
   c.rotate(angle + swingOffset)
   const bladeColor = extras.legendary ? '#C9A227' : '#B8B0A0'
-  if (extras.bow) {
+  if (isBow) {
     c.strokeStyle = '#8A6A3E'
     c.lineWidth = 2
     c.beginPath()
@@ -131,6 +167,27 @@ export function drawHumanoid(
     c.lineTo(radius * 1.55, 0)
     c.lineTo(radius * 0.9, radius * 0.66)
     c.stroke()
+  } else if (extras.weaponShape === 'staff') {
+    c.strokeStyle = '#5C4A34'
+    c.lineWidth = Math.max(2, radius * 0.14)
+    c.beginPath()
+    c.moveTo(radius * 0.3, 0)
+    c.lineTo(radius * 1.85, 0)
+    c.stroke()
+    const orbColor = extras.legendary ? '#C9A227' : '#8A4C9B'
+    c.beginPath()
+    c.arc(radius * 1.85, 0, radius * 0.32, 0, Math.PI * 2)
+    c.fillStyle = orbColor
+    c.globalAlpha = 0.85
+    c.fill()
+    c.globalAlpha = 1
+    c.beginPath()
+    c.arc(radius * 1.85, 0, radius * 0.55, 0, Math.PI * 2)
+    c.strokeStyle = orbColor
+    c.globalAlpha = 0.35
+    c.lineWidth = 2
+    c.stroke()
+    c.globalAlpha = 1
   } else if (extras.weaponShape === 'dagger') {
     c.strokeStyle = bladeColor
     c.lineWidth = Math.max(2, radius * 0.14)

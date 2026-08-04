@@ -1,6 +1,6 @@
 export type Rarity = 'comun' | 'raro' | 'epico' | 'legendario'
 
-export type WeaponShape = 'dagger' | 'sword' | 'axe' | 'spear'
+export type WeaponShape = 'dagger' | 'sword' | 'axe' | 'spear' | 'bow' | 'staff'
 
 export interface WeaponDef {
   id: string
@@ -22,11 +22,14 @@ export interface ArmorDef {
   speedMod: number // multiplicador de velocidad, 1 = normal
 }
 
-export type ClassId = 'guerrero' | 'guardian' | 'cazador'
+export type ClassId = 'guerrero' | 'enano' | 'arquero' | 'mago'
 
 export interface ClassDef {
   id: ClassId
   name: string
+  weaponShape: WeaponShape
+  ranged: boolean
+  bodyScale: number // 1 = tamaño normal; el enano es más bajo
   ultimateName: string
   description: string
   cooldown: number // segundos

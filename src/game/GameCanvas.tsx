@@ -36,8 +36,10 @@ const ENEMY_TELEGRAPH_WINDOW = 0.45
 const ULTIMATE_SHIELD_DAMAGE_MULT = 0.08
 const ULTIMATE_SHIELD_DURATION = 4
 const ULTIMATE_GUERRERO_RADIUS = 150
-const ULTIMATE_CAZADOR_RADIUS = 280
+const ULTIMATE_ARQUERO_RADIUS = 280
+const ULTIMATE_MAGO_RADIUS = 320
 const ATTACK_SWING_DURATION = 0.135
+const RANGED_ATTACK_RANGE = 230
 
 function damageReductionFromDefense(defense: number) {
   return defense / (defense + 50)
@@ -59,6 +61,7 @@ interface ArrowVisual {
   from: Vec2
   to: Vec2
   t: number
+  kind?: 'arrow' | 'bolt'
 }
 
 const ARROW_FLIGHT_TIME = 0.28
@@ -279,7 +282,7 @@ export default function GameCanvas({
     let dmg = amount * (1 - damageReductionFromDefense(armor.defense))
     if (performance.now() < lp.ultimateShieldUntil) {
       dmg *= ULTIMATE_SHIELD_DAMAGE_MULT
-      floatingRef.current.push({ pos: { ...lp.pos }, text: 'Bastión', color: '#4C6B8A', life: 0.6, vy: -30 })
+      floatingRef.current.push({ pos: { ...lp.pos }, text: 'Coraza', color: '#8A7A5C', life: 0.6, vy: -30 })
     } else if (lp.blocking) {
       dmg *= BLOCK_DAMAGE_MULT
       floatingRef.current.push({ pos: { ...lp.pos }, text: 'Bloqueado', color: '#4C6B8A', life: 0.6, vy: -30 })
@@ -309,8 +312,8 @@ export default function GameCanvas({
           else room?.sendHitRequest({ enemyUid: uid, damage: dmg, attackerId: lp.id, isCrit: false })
         }
       })
-    } else if (lp.classId === 'cazador') {
-      const radius = ULTIMATE_CAZADOR_RADIUS * power
+    } else if (lp.classId === 'arquero') {
+      const radius = ULTIMATE_ARQUERO_RADIUS * power
       enemiesRef.current.forEach((e, uid) => {
         if (dist(lp.pos, e.pos) <= radius) {
           const dmg = weapon.damage * 1.1 * (1 + lp.level * 0.025)
@@ -318,7 +321,16 @@ export default function GameCanvas({
           else room?.sendHitRequest({ enemyUid: uid, damage: dmg, attackerId: lp.id, isCrit: false })
         }
       })
-    } else if (lp.classId === 'guardian') {
+    } else if (lp.classId === 'mago') {
+      const radius = ULTIMATE_MAGO_RADIUS * power
+      enemiesRef.current.forEach((e, uid) => {
+        if (dist(lp.pos, e.pos) <= radius) {
+          const dmg = weapon.damage * 0.95 * (1 + lp.level * 0.025)
+          if (isHostRef.current) applyHitToEnemy(uid, dmg, lp.id, lp.pos)
+          else room?.sendHitRequest({ enemyUid: uid, damage: dmg, attackerId: lp.id, isCrit: false })
+        }
+      })
+    } else if (lp.classId === 'enano') {
       lp.ultimateShieldUntil = performance.now() + ULTIMATE_SHIELD_DURATION * power * 1000
       lp.hp = Math.min(lp.maxHp, lp.hp + lp.maxHp * 0.3 * power)
     }
@@ -330,12 +342,40 @@ export default function GameCanvas({
     const lp = localRef.current
     if (!lp.alive || lp.attackCooldownLeft > 0) return
     const weapon = getWeapon(lp.weaponId)
+    const cls = getClass(lp.classId)
     lp.attackCooldownLeft = 1 / weapon.attackSpeed
     lp.attackAnim = ATTACK_SWING_DURATION
-    let hitAny = false
+
+    if (cls.ranged) {
+      // arco/bastón: un solo disparo al enemigo más cercano dentro del alcance
+      let nearestUid: string | null = null
+      let nearestE: EnemyInstance | null = null
+      let nearestD = Infinity
+      enemiesRef.current.forEach((e, uid) => {
+        const d = dist(lp.pos, e.pos)
+        if (d <= RANGED_ATTACK_RANGE && d < nearestD) {
+          nearestD = d
+          nearestUid = uid
+          nearestE = e
+        }
+      })
+      if (nearestUid && nearestE) {
+        const targetPos: Vec2 = (nearestE as EnemyInstance).pos
+        lp.facing = normalize({ x: targetPos.x - lp.pos.x, y: targetPos.y - lp.pos.y })
+        const crit = Math.random() < weapon.critChance
+        const dmg = weapon.damage * (1 + lp.level * 0.025) * (crit ? 1.8 : 1)
+        arrowsRef.current.push({ from: { ...lp.pos }, to: { ...targetPos }, t: 0, kind: cls.weaponShape === 'staff' ? 'bolt' : 'arrow' })
+        if (isHostRef.current) {
+          applyHitToEnemy(nearestUid, dmg, lp.id, lp.pos)
+        } else {
+          room?.sendHitRequest({ enemyUid: nearestUid, damage: dmg, attackerId: lp.id, isCrit: crit })
+        }
+      }
+      return
+    }
+
     enemiesRef.current.forEach((e, uid) => {
       if (dist(lp.pos, e.pos) <= weapon.range) {
-        hitAny = true
         const crit = Math.random() < weapon.critChance
         const dmg = weapon.damage * (1 + lp.level * 0.025) * (crit ? 1.8 : 1)
         if (isHostRef.current) {
@@ -346,7 +386,6 @@ export default function GameCanvas({
       }
     })
     void now
-    void hitAny
   }
 
   useEffect(() => {
@@ -607,6 +646,7 @@ export default function GameCanvas({
           blocking: lp.blocking,
           weaponId: lp.weaponId,
           armorId: lp.armorId,
+          classId: lp.classId,
         })
       }
 
@@ -733,9 +773,9 @@ export default function GameCanvas({
         }
 
         drawHumanoid(ctx, e.pos, facing, r, def.color, '#20241A', def.isBoss ? '#C9A227' : 'rgba(0,0,0,0.45)', def.isBoss ? 3 : 1.5, e.hitFlash > 0, {
-          horns: !def.isBoss,
+          tusks: true,
           crown: def.isBoss,
-          bow: !!def.ranged,
+          weaponShape: def.ranged ? 'bow' : undefined,
         })
         drawBar(ctx, e.pos.x - r, e.pos.y - r - 12, r * 2, 5, e.hp / e.maxHp, def.isBoss ? '#C9A227' : '#8B3A2B')
         if (def.isBoss) {
@@ -748,13 +788,19 @@ export default function GameCanvas({
 
       // jugadores remotos
       remotePlayersRef.current.forEach((rp) => {
+        const wasAttacking = remoteSwingRef.current.has(rp.id)
         const swingT = getRemoteSwingT(rp.id, rp.attacking, dt)
-        drawPlayer(ctx, rp.pos, rp.facing, rp.color, rp.name, rp.hp, rp.maxHp, false, swingT, rp.blocking, rp.weaponId)
+        const rpCls = getClass(rp.classId)
+        if (rp.attacking && !wasAttacking && rpCls.ranged) {
+          const to = { x: rp.pos.x + rp.facing.x * RANGED_ATTACK_RANGE, y: rp.pos.y + rp.facing.y * RANGED_ATTACK_RANGE }
+          arrowsRef.current.push({ from: { ...rp.pos }, to, t: 0, kind: rpCls.weaponShape === 'staff' ? 'bolt' : 'arrow' })
+        }
+        drawPlayer(ctx, rp.pos, rp.facing, rp.color, rp.name, rp.hp, rp.maxHp, false, swingT, rp.blocking, rp.weaponId, rp.classId)
       })
 
       // jugador local
       const localSwingT = lp.attackAnim > 0 ? 1 - lp.attackAnim / ATTACK_SWING_DURATION : 0
-      drawPlayer(ctx, lp.pos, lp.facing, lp.color, lp.name + ' (vos)', lp.hp, lp.maxHp, true, localSwingT, lp.blocking, lp.weaponId)
+      drawPlayer(ctx, lp.pos, lp.facing, lp.color, lp.name + ' (vos)', lp.hp, lp.maxHp, true, localSwingT, lp.blocking, lp.weaponId, lp.classId)
       if (lp.hitFlash > 0) {
         ctx.beginPath()
         ctx.arc(lp.pos.x, lp.pos.y, 26, 0, Math.PI * 2)
@@ -775,7 +821,7 @@ export default function GameCanvas({
         ctx.stroke()
       }
 
-      // flechas en vuelo
+      // flechas / hechizos en vuelo
       arrowsRef.current.forEach((a) => {
         const x = a.from.x + (a.to.x - a.from.x) * a.t
         const y = a.from.y + (a.to.y - a.from.y) * a.t
@@ -783,27 +829,45 @@ export default function GameCanvas({
         ctx.save()
         ctx.translate(x, y)
         ctx.rotate(angle)
-        ctx.strokeStyle = '#D9CBA0'
-        ctx.lineWidth = 2
-        ctx.beginPath()
-        ctx.moveTo(-14, 0)
-        ctx.lineTo(8, 0)
-        ctx.stroke()
-        ctx.fillStyle = '#8A7A5C'
-        ctx.beginPath()
-        ctx.moveTo(8, 0)
-        ctx.lineTo(2, -3.5)
-        ctx.lineTo(2, 3.5)
-        ctx.closePath()
-        ctx.fill()
-        ctx.strokeStyle = 'rgba(232,223,200,0.7)'
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.moveTo(-14, 0)
-        ctx.lineTo(-9, -4)
-        ctx.moveTo(-14, 0)
-        ctx.lineTo(-9, 4)
-        ctx.stroke()
+        if (a.kind === 'bolt') {
+          ctx.strokeStyle = 'rgba(138, 76, 155, 0.5)'
+          ctx.lineWidth = 6
+          ctx.beginPath()
+          ctx.moveTo(-16, 0)
+          ctx.lineTo(0, 0)
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.arc(4, 0, 5, 0, Math.PI * 2)
+          ctx.fillStyle = '#C9A9E0'
+          ctx.fill()
+          ctx.beginPath()
+          ctx.arc(4, 0, 8, 0, Math.PI * 2)
+          ctx.strokeStyle = 'rgba(138, 76, 155, 0.6)'
+          ctx.lineWidth = 2
+          ctx.stroke()
+        } else {
+          ctx.strokeStyle = '#D9CBA0'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.moveTo(-14, 0)
+          ctx.lineTo(8, 0)
+          ctx.stroke()
+          ctx.fillStyle = '#8A7A5C'
+          ctx.beginPath()
+          ctx.moveTo(8, 0)
+          ctx.lineTo(2, -3.5)
+          ctx.lineTo(2, 3.5)
+          ctx.closePath()
+          ctx.fill()
+          ctx.strokeStyle = 'rgba(232,223,200,0.7)'
+          ctx.lineWidth = 1.5
+          ctx.beginPath()
+          ctx.moveTo(-14, 0)
+          ctx.lineTo(-9, -4)
+          ctx.moveTo(-14, 0)
+          ctx.lineTo(-9, 4)
+          ctx.stroke()
+        }
         ctx.restore()
       })
 
@@ -973,11 +1037,14 @@ export default function GameCanvas({
       isLocal: boolean,
       swingT: number,
       blocking: boolean,
-      weaponId: string
+      weaponId: string,
+      classId: string
     ) {
+      const cls = getClass(classId)
+      const radius = 18 * cls.bodyScale
       if (swingT > 0) {
         c.beginPath()
-        c.arc(pos.x, pos.y, 34, 0, Math.PI * 2)
+        c.arc(pos.x, pos.y, radius + 16, 0, Math.PI * 2)
         c.strokeStyle = color
         c.globalAlpha = 0.5
         c.lineWidth = 3
@@ -985,17 +1052,18 @@ export default function GameCanvas({
         c.globalAlpha = 1
       }
       const weapon = getWeapon(weaponId)
-      drawHumanoid(c, pos, facing, 18, color, '#E8DFC8', isLocal ? '#E8DFC8' : 'rgba(232,223,200,0.6)', isLocal ? 3 : 2, false, {
+      drawHumanoid(c, pos, facing, radius, color, '#E8DFC8', isLocal ? '#E8DFC8' : 'rgba(232,223,200,0.6)', isLocal ? 3 : 2, false, {
         shield: blocking,
         swingT,
-        weaponShape: weapon.shape,
+        weaponShape: cls.weaponShape,
         legendary: weapon.rarity === 'legendario',
+        beard: cls.id === 'enano',
       })
-      drawBar(c, pos.x - 22, pos.y - 34, 44, 6, Math.max(0, hp) / maxHp, '#7FD1AE')
+      drawBar(c, pos.x - 22, pos.y - radius * 1.9, 44, 6, Math.max(0, hp) / maxHp, '#7FD1AE')
       c.fillStyle = blocking ? '#4C6B8A' : '#E8DFC8'
       c.font = '11px Inter, sans-serif'
       c.textAlign = 'center'
-      c.fillText(blocking ? `${name} 🛡` : name, pos.x, pos.y - 40)
+      c.fillText(blocking ? `${name} 🛡` : name, pos.x, pos.y - radius * 2.2)
     }
 
     function getEntityPosById(id: string | null): Vec2 | null {

@@ -30,6 +30,7 @@ export interface NetPlayerUpdate {
   blocking: boolean
   weaponId: string
   armorId: string
+  classId: string
 }
 
 export interface EnemySyncPayload {

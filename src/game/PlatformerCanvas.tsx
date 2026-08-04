@@ -405,6 +405,7 @@ export default function PlatformerCanvas({
           blocking: false,
           weaponId: lp.weaponId,
           armorId: lp.armorId,
+          classId: 'guerrero',
         })
       }
 
